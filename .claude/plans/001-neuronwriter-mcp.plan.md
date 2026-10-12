@@ -1,0 +1,1 @@
+../../.cursor/plans/001-neuronwriter-mcp.plan.md
