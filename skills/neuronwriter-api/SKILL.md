@@ -20,6 +20,23 @@ compatibility:
 
 > **Author**: Anton Gulin · **Tool**: [opencode-skill-creator](https://github.com/antongulin/opencode-skill-creator) · **GitHub**: [@antongulin](https://github.com/antongulin) · **Registry**: [skills.sh](https://www.skills.sh/docs)
 
+## With the neuronwriter MCP (preferred)
+
+When the `nw_*` tools are available, use them instead of the bash script. They work on plans without API access (through the user's browser session) and follow the same workflow below:
+
+| Step in this skill | MCP tool |
+|---|---|
+| `list-projects` | `nw_list_projects` |
+| `list-queries` | `nw_list_queries` (keyword/tag filters) |
+| `new-query` | `nw_create_query` — returns an existing analysis for the same keyword; spending needs the user's OK, then `confirm: true` |
+| `wait-and-get` / `get-query` | `nw_get_recommendations` with `wait_seconds: 120` |
+| `get-content` | `nw_get_content` |
+| `evaluate-content` | `nw_score_content` |
+| `import-content` | `nw_import_content` |
+| (web UI only) | `nw_set_done`, `nw_generate_outline` (AI credits, `confirm: true`), `nw_status` (remaining credits) |
+
+`nw_get_recommendations` returns `terms.content_basic` as `{term, min, max}` already parsed from the ranges, and `nw_status` shows remaining analyses, so the quota check no longer needs the dashboard.
+
 ## Quota System
 
 The API (v0.5) only consumes **content writer analysis credits** (1 per `new-query`). Each account's limit depends on their plan.

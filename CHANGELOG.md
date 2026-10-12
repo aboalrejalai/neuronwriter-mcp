@@ -4,6 +4,23 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-12
+
+### Added
+- Session backend: drives NeuronWriter through the owner's logged-in browser profile (Playwright), so the tools work on plans without API access.
+- 10 `nw_*` tools: `nw_status`, `nw_list_projects`, `nw_list_queries`, `nw_get_recommendations`, `nw_get_content`, `nw_score_content`, `nw_import_content`, `nw_set_done`, `nw_create_query`, `nw_generate_outline`.
+- `login` and `status` commands; `serve` stays the default.
+- `confirm: true` gate on credit-spending tools; `nw_create_query` returns an existing analysis for the same keyword instead of spending.
+- Request pacing (one at a time, 1.5 s before writes), backoff on 429/5xx for reads only.
+- 34 fixture-based tests; recorded endpoint shapes in `docs/backend-endpoints.md`; research notes in `docs/research/`.
+
+### Changed
+- MCP SDK 0.5 → 1.32.1 (`McpServer.registerTool`), zod 4. The imported API client now sits behind a shared backend contract (`ApiBackend`), selected with `NW_BACKEND`.
+- Tool names now carry the `nw_` prefix; `get_query` and `wait_for_query` became `nw_get_recommendations`.
+- The skill maps its steps to the `nw_*` tools.
+
+## [0.1.0] - 2026-10-12
+
 ### Added
 - MCP server from softreviewed/neuronwriter-mcp-server@9fe5f8a as the base: 7 API v0.5 tools.
 - `wait_for_query` tool, ported from the skill's `wait-and-get`.

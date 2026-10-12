@@ -2,16 +2,20 @@
 
 A local MCP server that lets AI agents use your NeuronWriter account (projects, content analyses, SEO recommendations, writing, scoring, NeuronWriter AI). It works on plans **without** API access by using your own logged-in browser session, and it can switch to the official API when a key is available.
 
-> Status: the two open-source projects below are merged into this repo and the API-key MCP builds and runs. The browser-session backend (for plans without API access) is next — see [`.claude/plans/001-neuronwriter-mcp.plan.md`](.claude/plans/001-neuronwriter-mcp.plan.md).
+> Status **v0.2.0**: 10 tools on MCP SDK 1.32.1, session backend (works on Bronze, no API key) and API backend, 34 tests. Waiting on a first live run after `npm run login`. Details: [`.claude/plans/001-neuronwriter-mcp.plan.md`](.claude/plans/001-neuronwriter-mcp.plan.md).
 
 ## What's in this repo
 
 | Path | What | From |
 |---|---|---|
-| `src/index.ts` | MCP server (stdio), 8 tools over API v0.5 | [softreviewed/neuronwriter-mcp-server](https://github.com/softreviewed/neuronwriter-mcp-server) + `wait_for_query` ported from the skill |
-| `skills/neuronwriter-api/` | Agent skill: workflow (brief → write → import → score loop, quota fallback), bash API wrapper, evals | [antongulin/neuronwriter-api-skill](https://github.com/antongulin/neuronwriter-api-skill) |
+| `src/index.ts` | CLI: `serve` (MCP on stdio, default), `login`, `status` | ours |
+| `src/tools/` | The 10 `nw_*` tools | ours, tool names after the official MCP |
+| `src/backends/session/` | Drives NeuronWriter through your logged-in browser profile (Playwright) | ours |
+| `src/backends/api/ApiBackend.ts` | API v0.5 client (Gold+) | [softreviewed/neuronwriter-mcp-server](https://github.com/softreviewed/neuronwriter-mcp-server), moved behind the shared backend contract |
+| `skills/neuronwriter-api/` | Agent skill: brief → write → import → score loop, quota fallback, bash API wrapper, evals | [antongulin/neuronwriter-api-skill](https://github.com/antongulin/neuronwriter-api-skill) |
+| `docs/research/` | Verified MCP best practices this code follows | ours |
+| `docs/backend-endpoints.md` | Internal `/backend/*` endpoints with recorded request shapes | ours |
 | `docs/api/api-docs.md` | API v0.5 reference | antongulin, plus our notes |
-| `docs/backend-endpoints.md` | The 99 internal `/backend/*` endpoints the web app uses (for the session backend) | ours |
 | `THIRD_PARTY_NOTICES.md` | MIT notices of both projects | — |
 
 ## Why
@@ -70,59 +74,10 @@ MCP client ──► │ nw_status · nw_list_projects · nw_list_queries   │
 ```
 
 - **Today (Bronze):** `SessionBackend` does everything, including the AI writer the public API doesn't offer.
-- **If upgraded to Gold:** set `NEURONWRITER_API_KEY` → `NW_BACKEND=auto` uses the API for what it covers and the session for the rest. Or connect the official MCP directly.
+- **If upgraded to Gold:** set `NEURONWRITER_API_KEY` → `NW_BACKEND=auto` switches to the API (done marks and AI then report "session backend only"). Or connect the official MCP directly.
 - **Licenses:** both repos are MIT and their code is now part of this one; their notices stay in `THIRD_PARTY_NOTICES.md`. MIT lets us copy and change anything as long as the notice is kept.
 
-## Use it today with an API key (Gold+)
-
-```bash
-npm install && npm run build
-```
-
-```bash
-claude mcp add --scope user neuronwriter -e NEURONWRITER_API_KEY=your-key -- node /Users/aboarejal/Desktop/Project/neuronwriter-mcp/build/index.js
-```
-
-Claude Desktop / Cursor / Cline take the same block in their MCP config:
-
-```json
-{
-  "mcpServers": {
-    "neuronwriter": {
-      "command": "node",
-      "args": ["/absolute/path/to/neuronwriter-mcp/build/index.js"],
-      "env": { "NEURONWRITER_API_KEY": "your-key" }
-    }
-  }
-}
-```
-
-| Tool | What it does | Spends credits |
-|---|---|---|
-| `list_projects` | Your projects | — |
-| `new_query` | New content analysis for a keyword | 1 analysis |
-| `get_query` | SEO recommendations (terms + ranges, questions, competitors, SERP intent) | — |
-| `wait_for_query` | Polls `get_query` until the analysis is ready | — |
-| `list_queries` | Filter queries by status, source, keyword, tags… | — |
-| `get_content` | Latest saved revision | — |
-| `import_content` | Save HTML (or import a URL) into the editor, returns score | — |
-| `evaluate_content` | Score HTML without saving | — |
-
-The key can also be given as `NW_API_KEY`.
-
-### The skill
-
-`skills/neuronwriter-api/SKILL.md` teaches an agent the full workflow: discover → analyse → brief → write within the term ranges → import → re-score until it beats the top competitor, with a fallback to existing queries when the monthly quota is used up. Install it by copying the folder into your agent's skills path (e.g. `~/.claude/skills/`). Its bash wrapper works without the MCP:
-
-```bash
-NW_API_KEY=your-key ./skills/neuronwriter-api/scripts/neuronwriter.sh list-projects
-```
-
-```bash
-NW_API_KEY=your-key ./skills/neuronwriter-api/scripts/neuronwriter.sh wait-and-get QUERY_ID 30
-```
-
-## Quick start for the session backend (planned)
+## Install
 
 ```bash
 npm install && npm run build
@@ -131,13 +86,56 @@ npm install && npm run build
 ```bash
 npm run login
 ```
-A browser window opens. Log in yourself. The session is saved in `~/.neuronwriter-mcp/profile/`. Your password is never stored by this tool.
+A browser window opens; sign in yourself. The session is kept in `~/.neuronwriter-mcp/profile/` (only you can read it). Your password never passes through this tool. Run it again whenever a tool says the session expired.
 
 ```bash
-claude mcp add --scope user neuronwriter -- node /Users/aboarejal/Desktop/Project/neuronwriter-mcp/build/cli.js
+npm run status
 ```
 
-Then ask Claude: *"Using NeuronWriter, show me the recommendations for ديكورات مكة and rewrite the article to hit the target score."*
+```bash
+claude mcp add --scope user neuronwriter -- node /Users/aboarejal/Desktop/Project/neuronwriter-mcp/build/index.js
+```
+
+Claude Desktop / Cursor / Codex take the same command in their MCP config:
+
+```json
+{
+  "mcpServers": {
+    "neuronwriter": { "command": "node", "args": ["/absolute/path/to/neuronwriter-mcp/build/index.js"] }
+  }
+}
+```
+
+With a Gold+ API key, add `"env": { "NEURONWRITER_API_KEY": "your-key" }` and the same tools run over the official API (AI and done marks stay session-only).
+
+## Tools
+
+| Tool | What it does | Costs |
+|---|---|---|
+| `nw_status` | Session check, plan, monthly usage, reset date | — |
+| `nw_list_projects` | Your projects and their ids | — |
+| `nw_list_queries` | Analyses in a project (keyword/tag filters, paging) | — |
+| `nw_get_recommendations` | Terms with min–max ranges, title/H1/H2 terms, entities, heading ideas, targets, competitors; `wait_seconds` for new analyses | — |
+| `nw_get_content` | Latest saved article | — |
+| `nw_score_content` | Score HTML like the editor does, without saving | — |
+| `nw_import_content` | Save the article as a new revision, returns its score | — |
+| `nw_set_done` | Mark done / not done | — |
+| `nw_create_query` | New analysis. Returns an existing one for the same keyword instead | **1 analysis**, needs `confirm: true` |
+| `nw_generate_outline` | Outline from NeuronWriter's own AI | **AI credits**, needs `confirm: true` |
+
+Typical request: *"Using NeuronWriter, improve the ديكورات مكة article until it beats the top competitor, save it and mark it done."*
+
+### The skill
+
+`skills/neuronwriter-api/SKILL.md` teaches an agent the full workflow (its "With the neuronwriter MCP" section maps each step to the `nw_*` tools): discover → analyse → brief → write within the term ranges → import → re-score until it beats the top competitor, with a fallback to existing queries when the monthly quota is used up. Install it by copying the folder into your agent's skills path (e.g. `~/.claude/skills/`). Its bash wrapper works without the MCP:
+
+```bash
+NW_API_KEY=your-key ./skills/neuronwriter-api/scripts/neuronwriter.sh list-projects
+```
+
+```bash
+NW_API_KEY=your-key ./skills/neuronwriter-api/scripts/neuronwriter.sh wait-and-get QUERY_ID 30
+```
 
 ## Configuration
 
