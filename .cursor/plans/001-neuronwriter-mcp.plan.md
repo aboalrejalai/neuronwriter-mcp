@@ -331,7 +331,7 @@ src/backends/Backend.ts  (interface: listProjects, newQuery, getQuery, …)
 **Estimated scope:** Medium
 
 ### TASK-014: ApiBackend (Gold-ready)
-**Description:** Implement `Backend` over `POST https://app.neuronwriter.com/neuron-api/0.5/writer/{list-projects,new-query,get-query,list-queries,get-content,import-content,evaluate-content}` with `X-API-KEY` (reference: `docs/api-v0.5.md`). `select.ts` picks backend from `NW_BACKEND`. AI/done/tags tools throw `NotSupportedByBackend`. Contract tests run the same fixture-driven expectations against both backends.
+**Description:** Implement `Backend` over `POST https://app.neuronwriter.com/neuron-api/0.5/writer/{list-projects,new-query,get-query,list-queries,get-content,import-content,evaluate-content}` with `X-API-KEY` (reference: `docs/api/api-docs.md`). `select.ts` picks backend from `NW_BACKEND`. AI/done/tags tools throw `NotSupportedByBackend`. Contract tests run the same fixture-driven expectations against both backends.
 
 **Acceptance criteria:**
 - [ ] `NW_BACKEND=api` without a key → clear startup error

@@ -46,7 +46,7 @@ Existing data (good for read-only testing):
 - **99 internal endpoints** were found in `assets/js/scripts.js` and `assets/js/editor-t.js` → full list in [`docs/backend-endpoints.md`](docs/backend-endpoints.md).
 - The analysis page carries its data in JS globals (`contadu_analysis_sig`, `content_terms`, `PROJECT_SIG`, …). Example seen in source:
   `save-optimized-content` body = `{ analysis: contadu_analysis_sig, content: { title, description, content: html, text, content_terms, custom_h1_terms, custom_h2_terms, … } }`.
-- Public API (Gold+ only): `POST https://app.neuronwriter.com/neuron-api/0.5/writer/<method>` with header `X-API-KEY` → [`docs/api-v0.5.md`](docs/api-v0.5.md).
+- Public API (Gold+ only): `POST https://app.neuronwriter.com/neuron-api/0.5/writer/<method>` with header `X-API-KEY` → [`docs/api/api-docs.md`](docs/api/api-docs.md).
 - Official remote MCP (Gold+ only): `https://app.neuronwriter.com/mcp/http`, OAuth sign-in, 12 tools. Our tool names mirror it with an `nw_` prefix.
 
 ## Architecture (summary — details in the plan)
@@ -61,7 +61,7 @@ MCP client ──stdio──► src/server.ts ─► src/tools/*.ts ─► Backe
 - `NW_BACKEND=session|api|auto` (`auto` = api if `NEURONWRITER_API_KEY` is set, else session), `NW_PROFILE_DIR`, `NEURONWRITER_API_KEY` (only if the plan is ever upgraded).
 - `src/cli.ts` has three subcommands: `serve` (default, stdio MCP), `login`, `status`.
 - **One warm headless browser**: launched lazily on the first tool call, reused, closed after 10 min idle. Data not behind an endpoint (recommendations, competitors) is read from the analysis page's JS globals via `page.evaluate`, not by parsing HTML.
-- **Both backends return the same shapes** — those of API v0.5 `get-query` / `list-queries` (`terms_txt`, `terms`, `ideas`, `metrics`, `competitors`; see `docs/api-v0.5.md`). Tools must not care which backend answered; tools the API lacks (AI, done marks, tags) throw `NotSupportedByBackend` on `ApiBackend`.
+- **Both backends return the same shapes** — those of API v0.5 `get-query` / `list-queries` (`terms_txt`, `terms`, `ideas`, `metrics`, `competitors`; see `docs/api/api-docs.md`). Tools must not care which backend answered; tools the API lacks (AI, done marks, tags) throw `NotSupportedByBackend` on `ApiBackend`.
 - `src/limiter.ts`: single-flight FIFO, ≥1.5 s gap for writes / 300 ms for reads, max 3 retries with backoff on 429/5xx.
 - Error mapping in `SessionBackend`: login redirect / HTML login page → `SessionExpiredError` ("run: npx neuronwriter-mcp login"); plan-limit messages → `PlanLimitError` carrying NeuronWriter's text verbatim.
 - Tools use `registerTool` with zod schemas, `annotations` (`readOnlyHint`/`destructiveHint`/…) and `structuredContent`. Credit-consuming tools say so in their description; `nw_create_query` dedupes identical keyword+engine+language within 30 min unless `force: true`.

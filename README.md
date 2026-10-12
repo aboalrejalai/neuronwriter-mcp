@@ -2,7 +2,17 @@
 
 A local MCP server that lets AI agents use your NeuronWriter account (projects, content analyses, SEO recommendations, writing, scoring, NeuronWriter AI). It works on plans **without** API access by using your own logged-in browser session, and it can switch to the official API when a key is available.
 
-> Status: planning complete, implementation not started. See [`.claude/plans/001-neuronwriter-mcp.plan.md`](.claude/plans/001-neuronwriter-mcp.plan.md).
+> Status: the two open-source projects below are merged into this repo and the API-key MCP builds and runs. The browser-session backend (for plans without API access) is next — see [`.claude/plans/001-neuronwriter-mcp.plan.md`](.claude/plans/001-neuronwriter-mcp.plan.md).
+
+## What's in this repo
+
+| Path | What | From |
+|---|---|---|
+| `src/index.ts` | MCP server (stdio), 8 tools over API v0.5 | [softreviewed/neuronwriter-mcp-server](https://github.com/softreviewed/neuronwriter-mcp-server) + `wait_for_query` ported from the skill |
+| `skills/neuronwriter-api/` | Agent skill: workflow (brief → write → import → score loop, quota fallback), bash API wrapper, evals | [antongulin/neuronwriter-api-skill](https://github.com/antongulin/neuronwriter-api-skill) |
+| `docs/api/api-docs.md` | API v0.5 reference | antongulin, plus our notes |
+| `docs/backend-endpoints.md` | The 99 internal `/backend/*` endpoints the web app uses (for the session backend) | ours |
+| `THIRD_PARTY_NOTICES.md` | MIT notices of both projects | — |
 
 ## Why
 
@@ -15,7 +25,7 @@ My plan is **Neuron-Bronze-AppSumo** (lifetime): 25 analyses/month, 15,000 AI cr
 | What | Link | Needs |
 |---|---|---|
 | Official MCP server (remote, OAuth, 12 tools) | `https://app.neuronwriter.com/mcp/http` · [FAQ](https://neuronwriter.com/faqs/what-is-the-neuronwriter-mcp-server/) | Gold+ |
-| Neuron API v0.5 (beta) | `https://app.neuronwriter.com/neuron-api/0.5/writer/<method>`, header `X-API-KEY` · our notes: [`docs/api-v0.5.md`](docs/api-v0.5.md) | Gold+ (key in Profile → *Neuron API access*) |
+| Neuron API v0.5 (beta) | `https://app.neuronwriter.com/neuron-api/0.5/writer/<method>`, header `X-API-KEY` · reference: [`docs/api/api-docs.md`](docs/api/api-docs.md) | Gold+ (key in Profile → *Neuron API access*) |
 | Web app (what we automate) | https://app.neuronwriter.com/ | any plan |
 
 The official MCP's 12 tools — our tool surface copies these names with an `nw_` prefix:
@@ -23,10 +33,10 @@ list projects · create project · list queries (filter by status/tags/source) �
 
 ### Open-source projects (both MIT, both need an API key)
 
-| Repo | Stars* | What it gives | What we take |
+| Repo | Stars* | What it gives | What we took |
 |---|---|---|---|
-| [softreviewed/neuronwriter-mcp-server](https://github.com/softreviewed/neuronwriter-mcp-server) | 9 | Small stdio MCP (207 lines, MCP SDK 0.5, axios). 7 tools: `list_projects`, `new_query`, `get_query`, `list_queries`, `get_content`, `import_content`, `evaluate_content` | Tool naming and input schemas for the `ApiBackend` |
-| [antongulin/neuronwriter-api-skill](https://github.com/antongulin/neuronwriter-api-skill) | 0 | Agent skill + bash script + the most complete **API v0.5 reference** I found, plus evals | The API reference (rewritten in `docs/api-v0.5.md`) and eval ideas |
+| [softreviewed/neuronwriter-mcp-server](https://github.com/softreviewed/neuronwriter-mcp-server) @ `9fe5f8a` | 9 | Small stdio MCP (207 lines, MCP SDK 0.5, axios). 7 tools: `list_projects`, `new_query`, `get_query`, `list_queries`, `get_content`, `import_content`, `evaluate_content` | **The base** — its code is `src/index.ts` |
+| [antongulin/neuronwriter-api-skill](https://github.com/antongulin/neuronwriter-api-skill) @ `c9ab509` | 0 | Agent skill + bash script + the most complete **API v0.5 reference** I found, plus evals | **Layered on top** — skill, script (bug fixed), evals, API reference; its polling became the `wait_for_query` tool. Left out: its CodeGraph/Robin dev configs and its `AGENTS.md` |
 
 \* checked 2026-10-12.
 
@@ -61,9 +71,58 @@ MCP client ──► │ nw_status · nw_list_projects · nw_list_queries   │
 
 - **Today (Bronze):** `SessionBackend` does everything, including the AI writer the public API doesn't offer.
 - **If upgraded to Gold:** set `NEURONWRITER_API_KEY` → `NW_BACKEND=auto` uses the API for what it covers and the session for the rest. Or connect the official MCP directly.
-- **Licenses:** we write our own code; the MIT notices for the two repos stay in `THIRD_PARTY_NOTICES.md`. MIT lets us copy and change anything as long as the notice is kept.
+- **Licenses:** both repos are MIT and their code is now part of this one; their notices stay in `THIRD_PARTY_NOTICES.md`. MIT lets us copy and change anything as long as the notice is kept.
 
-## Quick start (after implementation)
+## Use it today with an API key (Gold+)
+
+```bash
+npm install && npm run build
+```
+
+```bash
+claude mcp add --scope user neuronwriter -e NEURONWRITER_API_KEY=your-key -- node /Users/aboarejal/Desktop/Project/neuronwriter-mcp/build/index.js
+```
+
+Claude Desktop / Cursor / Cline take the same block in their MCP config:
+
+```json
+{
+  "mcpServers": {
+    "neuronwriter": {
+      "command": "node",
+      "args": ["/absolute/path/to/neuronwriter-mcp/build/index.js"],
+      "env": { "NEURONWRITER_API_KEY": "your-key" }
+    }
+  }
+}
+```
+
+| Tool | What it does | Spends credits |
+|---|---|---|
+| `list_projects` | Your projects | — |
+| `new_query` | New content analysis for a keyword | 1 analysis |
+| `get_query` | SEO recommendations (terms + ranges, questions, competitors, SERP intent) | — |
+| `wait_for_query` | Polls `get_query` until the analysis is ready | — |
+| `list_queries` | Filter queries by status, source, keyword, tags… | — |
+| `get_content` | Latest saved revision | — |
+| `import_content` | Save HTML (or import a URL) into the editor, returns score | — |
+| `evaluate_content` | Score HTML without saving | — |
+
+The key can also be given as `NW_API_KEY`.
+
+### The skill
+
+`skills/neuronwriter-api/SKILL.md` teaches an agent the full workflow: discover → analyse → brief → write within the term ranges → import → re-score until it beats the top competitor, with a fallback to existing queries when the monthly quota is used up. Install it by copying the folder into your agent's skills path (e.g. `~/.claude/skills/`). Its bash wrapper works without the MCP:
+
+```bash
+NW_API_KEY=your-key ./skills/neuronwriter-api/scripts/neuronwriter.sh list-projects
+```
+
+```bash
+NW_API_KEY=your-key ./skills/neuronwriter-api/scripts/neuronwriter.sh wait-and-get QUERY_ID 30
+```
+
+## Quick start for the session backend (planned)
 
 ```bash
 npm install && npm run build

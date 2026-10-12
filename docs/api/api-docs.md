@@ -138,3 +138,9 @@ There is no API endpoint to check remaining credits. To detect exhaustion: `new-
 - Beta API — support at support@neuronwriter.com
 - Gold plan or higher required
 - No other API versions (v1, v2) exist — only v0.5
+
+## Notes for this project
+
+- Source: imported from [antongulin/neuronwriter-api-skill](https://github.com/antongulin/neuronwriter-api-skill) @ `c9ab509` (MIT). The endpoint set matches what [softreviewed/neuronwriter-mcp-server](https://github.com/softreviewed/neuronwriter-mcp-server) calls. The API is beta — re-check against NeuronWriter's official docs before relying on a field.
+- `src/index.ts` exposes every method above as an MCP tool (snake_case names), plus `wait_for_query` for polling.
+- The planned browser-session backend must return the same shapes as `/get-query` and `/list-queries`, so tools don't care which backend answered. Its internal endpoints are in [`../backend-endpoints.md`](../backend-endpoints.md).
