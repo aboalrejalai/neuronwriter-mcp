@@ -1,234 +1,96 @@
 #!/usr/bin/env node
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
-import { z } from "zod";
-import axios from 'axios';
+import { parseArgs } from 'node:util';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { APP_URL } from './backends/Backend.js';
+import { selectBackend } from './backends/select.js';
+import { launchContext, profileDir } from './backends/session/browser.js';
+import { readProjectsNav } from './backends/session/pageScripts.js';
+import { NwError } from './errors.js';
+import { log } from './log.js';
+import { VERSION, createServer } from './server.js';
 
-const API_KEY = process.env.NEURONWRITER_API_KEY ?? process.env.NW_API_KEY;
-if (!API_KEY) {
-  throw new Error('NEURONWRITER_API_KEY (or NW_API_KEY) environment variable is required');
+const HELP = `neuronwriter-mcp ${VERSION}
+
+Usage: neuronwriter-mcp [command]
+
+Commands:
+  serve    Run the MCP server on stdio (default)
+  login    Open a browser window to sign in to NeuronWriter once; the session is kept in the profile folder
+  status   Check the session and print plan, usage and reset date
+
+Environment:
+  NW_BACKEND             session | api | auto (default: api when a key is set, else session)
+  NW_PROFILE_DIR         browser profile folder (default: ~/.neuronwriter-mcp/profile)
+  NEURONWRITER_API_KEY   API key (Gold plan or higher only)`;
+
+const LOGIN_TIMEOUT_MS = 10 * 60 * 1000;
+
+async function serve(): Promise<void> {
+  const backend = selectBackend();
+  const server = createServer(backend);
+  const shutdown = async () => {
+    await backend.close();
+    await server.close();
+    process.exit(0);
+  };
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
+  process.stdin.on('close', shutdown);
+  await server.connect(new StdioServerTransport());
+  log(`v${VERSION} running on stdio (${backend.name} backend)`);
 }
 
-const API_ENDPOINT = 'https://app.neuronwriter.com/neuron-api/0.5/writer';
-
-// Create axios instance
-const apiClient = axios.create({
-  baseURL: API_ENDPOINT,
-  headers: {
-    'X-API-KEY': API_KEY,
-    'Accept': 'application/json',
-    'Content-Type': 'application/json',
-  },
-});
-
-// Define tools
-const tools = [
-  {
-    name: "list_projects",
-    description: "Retrieves a list of projects within the used account.",
-    inputSchema: {
-      type: "object",
-      properties: {},
-    },
-  },
-  {
-    name: "new_query",
-    description: "Creates a new content writer query for a given keyword, language and search engine.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        project: { type: "string", description: "The ID of your project taken from project's URL" },
-        keyword: { type: "string", description: "The keyword you want to generate a query for" },
-        engine: { type: "string", description: "Preferred search engine" },
-        language: { type: "string", description: "Content language" },
-        additional_keywords: { type: "array", items: { type: "string" }, description: "Additional supporting keywords" },
-        competitors_mode: { type: "string", enum: ["top10", "top30", "top-intent"], description: "Affects how competitors are selected" },
-      },
-      required: ["project", "keyword", "engine", "language"],
-    },
-  },
-  {
-    name: "get_query",
-    description: "Retrieves content recommendations for a given query.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        query: { type: "string", description: "The ID of your query" },
-      },
-      required: ["query"],
-    },
-  },
-  {
-    name: "wait_for_query",
-    description: "Polls get_query until the query status is \"ready\", then returns its recommendations. Use after new_query (analysis takes ~60 s).",
-    inputSchema: {
-      type: "object",
-      properties: {
-        query: { type: "string", description: "The ID of your query" },
-        poll_seconds: { type: "number", description: "Seconds between polls (default 30)" },
-        max_attempts: { type: "number", description: "Maximum number of polls before giving up (default 10)" },
-      },
-      required: ["query"],
-    },
-  },
-  {
-    name: "list_queries",
-    description: "Retrieves queries within a project matching your criteria.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        project: { type: "string", description: "The ID of your project" },
-        status: { type: "string", enum: ["waiting", "in progress", "ready"], description: "Query status" },
-        source: { type: "string", enum: ["neuron", "neuron-api"], description: "How was the query created" },
-        created: { type: "string", description: "Creation date" },
-        updated: { type: "string", description: "Query update date" },
-        keyword: { type: "string", description: "Main keyword" },
-        language: { type: "string", description: "Language used" },
-        engine: { type: "string", description: "Search engine used" },
-        tags: { type: "string", description: "Tags to filter by" },
-      },
-      required: ["project"],
-    },
-  },
-  {
-    name: "get_content",
-    description: "Retrieves the last content revision saved for a given query.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        query: { type: "string", description: "The ID of your query" },
-        revision_type: { type: "string", enum: ["manual", "all"], description: "Whether autosave revisions should be considered" },
-      },
-      required: ["query"],
-    },
-  },
-  {
-    name: "import_content",
-    description: "Allows you to update the editor content via API for a given query.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        query: { type: "string", description: "The ID of your query" },
-        html: { type: "string", description: "HTML content to import" },
-        title: { type: "string", description: "Title of the article" },
-        description: { type: "string", description: "Meta description" },
-        url: { type: "string", description: "URL to auto-import content from" },
-        id: { type: "string", description: "ID of container for URL import" },
-        class: { type: "string", description: "Class of container for URL import" },
-      },
-      required: ["query"],
-    },
-  },
-  {
-    name: "evaluate_content",
-    description: "Evaluates the content score without saving.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        query: { type: "string", description: "The ID of your query" },
-        html: { type: "string", description: "HTML content to evaluate" },
-        title: { type: "string", description: "Title of the article" },
-        description: { type: "string", description: "Meta description" },
-        url: { type: "string", description: "URL to auto-import content from" },
-        id: { type: "string", description: "ID of container for URL import" },
-        class: { type: "string", description: "Class of container for URL import" },
-      },
-      required: ["query"],
-    },
-  },
-];
-
-// Create an MCP server
-const server = new Server({
-  name: "neuronwriter-mcp",
-  version: "0.1.0",
-}, {
-  capabilities: {
-    tools: {},
-  },
-});
-
-// Define tool functions
-const toolFunctions: Record<string, (args: any) => Promise<any>> = {
-  list_projects: async () => {
-    const response = await apiClient.post('/list-projects');
-    return response.data;
-  },
-  new_query: async (args: any) => {
-    const response = await apiClient.post('/new-query', args);
-    return response.data;
-  },
-  get_query: async (args: any) => {
-    const response = await apiClient.post('/get-query', args);
-    return response.data;
-  },
-  wait_for_query: async (args: any) => {
-    const pollSeconds = args.poll_seconds ?? 30;
-    const maxAttempts = args.max_attempts ?? 10;
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      const response = await apiClient.post('/get-query', { query: args.query });
-      if (response.data?.status === 'ready') {
-        return response.data;
-      }
-      if (attempt < maxAttempts) {
-        await new Promise((resolve) => setTimeout(resolve, pollSeconds * 1000));
-      }
-    }
-    return { status: 'timeout', message: 'Query not ready after max attempts' };
-  },
-  list_queries: async (args: any) => {
-    const response = await apiClient.post('/list-queries', args);
-    return response.data;
-  },
-  get_content: async (args: any) => {
-    const response = await apiClient.post('/get-content', args);
-    return response.data;
-  },
-  import_content: async (args: any) => {
-    const response = await apiClient.post('/import-content', args);
-    return response.data;
-  },
-  evaluate_content: async (args: any) => {
-    const response = await apiClient.post('/evaluate-content', args);
-    return response.data;
-  },
-};
-
-// Set request handlers
-server.setRequestHandler(ListToolsRequestSchema, async () => {
-  return { tools };
-});
-
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  const { name, arguments: args } = request.params;
+async function login(): Promise<void> {
+  const dir = profileDir();
+  log(`Opening a browser window. Sign in to NeuronWriter yourself; this tool never sees your password. Profile: ${dir}`);
+  const context = await launchContext(dir, false);
   try {
-    const result = await toolFunctions[name](args);
-    return {
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify(result, null, 2),
-        },
-      ],
-    };
-  } catch (error) {
-    if (axios.isAxiosError(error)) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: `API error: ${error.response?.data?.message ?? error.message}`,
-          },
-        ],
-        isError: true,
-      };
+    const page = context.pages()[0] ?? (await context.newPage());
+    await page.goto(APP_URL);
+    const deadline = Date.now() + LOGIN_TIMEOUT_MS;
+    while (Date.now() < deadline) {
+      const signedIn = await page.evaluate(readProjectsNav).then((projects) => projects.length > 0).catch(() => false);
+      if (signedIn) {
+        log('Signed in. Session saved; closing the window.');
+        return;
+      }
+      await page.waitForTimeout(2000);
     }
-    throw error;
+    throw new Error('Timed out after 10 minutes waiting for the sign-in.');
+  } finally {
+    await context.close();
   }
-});
+}
 
-// Start the server
-const transport = new StdioServerTransport();
-await server.connect(transport);
-console.error('NeuronWriter MCP server running on stdio');
+async function status(): Promise<void> {
+  const backend = selectBackend();
+  try {
+    const s = await backend.status();
+    const usage = (u: { used: number; limit: number } | null) => (u ? `${u.used} used / ${u.limit}` : 'unknown');
+    console.log(`Backend:         ${s.backend}`);
+    console.log(`Plan:            ${s.plan ?? 'unknown'}`);
+    console.log(`Content writer:  ${usage(s.content_writer)}`);
+    console.log(`AI credits:      ${usage(s.ai_credits)}`);
+    console.log(`Projects:        ${usage(s.projects)}`);
+    console.log(`Limits reset:    ${s.resets_at ?? 'unknown'}`);
+  } finally {
+    await backend.close();
+  }
+}
+
+async function main(): Promise<void> {
+  const { positionals, values } = parseArgs({ allowPositionals: true, options: { help: { type: 'boolean', short: 'h' }, version: { type: 'boolean', short: 'v' } } });
+  if (values.help) return console.log(HELP);
+  if (values.version) return console.log(VERSION);
+  const command = positionals[0] ?? 'serve';
+  if (command === 'serve') return serve();
+  if (command === 'login') return login();
+  if (command === 'status') return status();
+  console.error(`Unknown command "${command}".\n\n${HELP}`);
+  process.exit(2);
+}
+
+main().catch((error) => {
+  console.error(error instanceof NwError ? `${error.message}\n${error.hint}` : error instanceof Error ? error.message : error);
+  process.exit(1);
+});
