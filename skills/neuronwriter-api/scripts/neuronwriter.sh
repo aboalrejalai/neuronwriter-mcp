@@ -80,10 +80,10 @@ case "$cmd" in
     call evaluate-content -d "$1"
     ;;
   wait-and-get)
-    local query_id="$1"
-    local poll_seconds="${2:-30}"
-    local max_attempts=10
-    local attempt=0
+    query_id="$1"
+    poll_seconds="${2:-30}"
+    max_attempts=10
+    attempt=0
     while [ $attempt -lt $max_attempts ]; do
       resp=$(call get-query -d "{\"query\": \"$query_id\"}")
       status=$(echo "$resp" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status','not found'))" 2>/dev/null)

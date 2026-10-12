@@ -5,9 +5,9 @@ import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprot
 import { z } from "zod";
 import axios from 'axios';
 
-const API_KEY = process.env.NEURONWRITER_API_KEY;
+const API_KEY = process.env.NEURONWRITER_API_KEY ?? process.env.NW_API_KEY;
 if (!API_KEY) {
-  throw new Error('NEURONWRITER_API_KEY environment variable is required');
+  throw new Error('NEURONWRITER_API_KEY (or NW_API_KEY) environment variable is required');
 }
 
 const API_ENDPOINT = 'https://app.neuronwriter.com/neuron-api/0.5/writer';
@@ -55,6 +55,19 @@ const tools = [
       type: "object",
       properties: {
         query: { type: "string", description: "The ID of your query" },
+      },
+      required: ["query"],
+    },
+  },
+  {
+    name: "wait_for_query",
+    description: "Polls get_query until the query status is \"ready\", then returns its recommendations. Use after new_query (analysis takes ~60 s).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "The ID of your query" },
+        poll_seconds: { type: "number", description: "Seconds between polls (default 30)" },
+        max_attempts: { type: "number", description: "Maximum number of polls before giving up (default 10)" },
       },
       required: ["query"],
     },
@@ -128,7 +141,7 @@ const tools = [
 
 // Create an MCP server
 const server = new Server({
-  name: "neuronwriter-server",
+  name: "neuronwriter-mcp",
   version: "0.1.0",
 }, {
   capabilities: {
@@ -149,6 +162,20 @@ const toolFunctions: Record<string, (args: any) => Promise<any>> = {
   get_query: async (args: any) => {
     const response = await apiClient.post('/get-query', args);
     return response.data;
+  },
+  wait_for_query: async (args: any) => {
+    const pollSeconds = args.poll_seconds ?? 30;
+    const maxAttempts = args.max_attempts ?? 10;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      const response = await apiClient.post('/get-query', { query: args.query });
+      if (response.data?.status === 'ready') {
+        return response.data;
+      }
+      if (attempt < maxAttempts) {
+        await new Promise((resolve) => setTimeout(resolve, pollSeconds * 1000));
+      }
+    }
+    return { status: 'timeout', message: 'Query not ready after max attempts' };
   },
   list_queries: async (args: any) => {
     const response = await apiClient.post('/list-queries', args);
