@@ -1,0 +1,206 @@
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
+import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import type { AccountStatus, Backend, ContentInput, ContentRevision, CreateQueryInput, Outline, Project, QuerySummary, Recommendations, Score } from '../src/backends/Backend.js';
+import { PlanLimitError, SessionExpiredError } from '../src/errors.js';
+import { createServer } from '../src/server.js';
+
+const ARABIC_HTML = '<h1>ديكورات مكة</h1><p>دليل شامل لتحويل منزلك إلى تحفة فنية عصرية ‎– مع أفضل معلم ديكورات.</p>';
+
+class FakeBackend implements Backend {
+  readonly name = 'session' as const;
+  calls: string[] = [];
+  failWith: Error | null = null;
+  queries: QuerySummary[] = [
+    { id: 'c1f8fbd2b38960d3', keyword: 'ديكورات مكة', created: null, engine: 'SA', content_score: 9, word_count: 409, tags: [], url: 'https://app.neuronwriter.com/analysis/view/c1f8fbd2b38960d3' },
+    ...Array.from({ length: 30 }, (_, i) => ({ id: i.toString(16).padStart(16, '0'), keyword: `keyword ${i}`, created: null, engine: 'US', content_score: i, word_count: 100, tags: i % 2 ? ['odd'] : [], url: '' })),
+  ];
+
+  private track(name: string) {
+    this.calls.push(name);
+    if (this.failWith) throw this.failWith;
+  }
+  async status(): Promise<AccountStatus> {
+    this.track('status');
+    return { backend: 'session', logged_in: true, plan: 'Neuron-Bronze-AppSumo', content_writer: { used: 3, limit: 25 }, ai_credits: { used: 0, limit: 15000 }, projects: { used: 2, limit: 2 }, resets_at: '2026-10-12 17:30 UTC' };
+  }
+  async listProjects(): Promise<Project[]> {
+    this.track('listProjects');
+    return [{ id: '6ec9249b8de0a586', name: 'makkahdecorsa.com', language: null, engine: null }];
+  }
+  async listQueries(): Promise<QuerySummary[]> {
+    this.track('listQueries');
+    return this.queries;
+  }
+  async getRecommendations(queryId: string): Promise<Recommendations> {
+    this.track('getRecommendations');
+    return {
+      query_id: queryId, keyword: 'ديكورات مكة', status: 'ready', targets: { word_count: 1034, readability: 20 },
+      terms: { content_basic: [{ term: 'مكة', min: 10, max: 32 }], content_extended: Array.from({ length: 80 }, (_, i) => ({ term: `t${i}`, min: 1, max: 1 })), title: [], description: [], h1: [], h2: [], entities: [] },
+      ideas: { headings: [], questions: [] },
+      competitors: Array.from({ length: 27 }, (_, i) => ({ rank: i + 1, url: `https://c${i}.example/`, title: null, content_score: 50, word_count: 900 })),
+    };
+  }
+  async getContent(queryId: string): Promise<ContentRevision> {
+    this.track('getContent');
+    return { query_id: queryId, title: 'ديكورات مكة', description: 'وصف', html: ARABIC_HTML, word_count: 12, saved_at: '2026-02-07 20:15' };
+  }
+  async scoreContent(_q: string, input: ContentInput): Promise<Score> {
+    this.track(`scoreContent:${input.html}`);
+    return { content_score: 61, word_count: 900, readability: 40, details: null };
+  }
+  async importContent(_q: string, input: ContentInput): Promise<Score> {
+    this.track(`importContent:${input.html}`);
+    return { content_score: 61, word_count: 900, readability: 40, details: null };
+  }
+  async setDone(_q: string, done: boolean): Promise<void> {
+    this.track(`setDone:${done}`);
+  }
+  async createQuery(input: CreateQueryInput): Promise<{ query_id: string | null }> {
+    this.track(`createQuery:${input.keyword}`);
+    return { query_id: 'abcdefabcdefabcd' };
+  }
+  async generateOutline(): Promise<Outline> {
+    this.track('generateOutline');
+    return { content: '<h2>…</h2>', ai_credits: 120 };
+  }
+  async close(): Promise<void> {}
+}
+
+let backend: FakeBackend;
+let client: Client;
+
+beforeEach(async () => {
+  backend = new FakeBackend();
+  const server = createServer(backend);
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  client = new Client({ name: 'test', version: '0' });
+  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+});
+
+afterEach(async () => {
+  await client.close();
+});
+
+const call = (name: string, args: Record<string, unknown> = {}) => client.callTool({ name, arguments: args }) as Promise<CallToolResult>;
+const text = (result: CallToolResult) => (result.content[0] as { text: string }).text;
+
+describe('tool surface', () => {
+  it('exposes 10 nw_ tools, each with title, long description, output schema and all four annotations', async () => {
+    const { tools } = await client.listTools();
+    expect(tools.map((t) => t.name).sort()).toEqual([
+      'nw_create_query', 'nw_generate_outline', 'nw_get_content', 'nw_get_recommendations', 'nw_import_content',
+      'nw_list_projects', 'nw_list_queries', 'nw_score_content', 'nw_set_done', 'nw_status',
+    ]);
+    for (const tool of tools) {
+      expect(tool.name).toMatch(/^nw_[a-z_]+$/);
+      expect(tool.title).toBeTruthy();
+      expect(tool.description!.split('. ').length).toBeGreaterThanOrEqual(3);
+      expect(tool.outputSchema).toBeTruthy();
+      expect(tool.inputSchema.additionalProperties).toBe(false);
+      const a = tool.annotations!;
+      for (const key of ['readOnlyHint', 'destructiveHint', 'idempotentHint', 'openWorldHint'] as const) expect(typeof a[key]).toBe('boolean');
+    }
+  });
+
+  it('keeps reads and credit-spending tools apart', async () => {
+    const { tools } = await client.listTools();
+    const readOnly = tools.filter((t) => t.annotations?.readOnlyHint).map((t) => t.name);
+    expect(readOnly.sort()).toEqual(['nw_get_content', 'nw_get_recommendations', 'nw_list_projects', 'nw_list_queries', 'nw_score_content', 'nw_status']);
+  });
+});
+
+describe('results', () => {
+  it('returns structuredContent plus a text copy', async () => {
+    const result = await call('nw_status');
+    expect(result.isError).toBeFalsy();
+    expect(result.structuredContent).toMatchObject({ plan: 'Neuron-Bronze-AppSumo', content_writer: { used: 3, limit: 25 } });
+    expect(text(result)).toContain('22/25 analyses left');
+  });
+
+  it('pages and filters queries', async () => {
+    const first = await call('nw_list_queries', { project: '6ec9249b8de0a586', limit: 10 });
+    expect(first.structuredContent).toMatchObject({ total: 31, has_more: true, next_offset: 10 });
+    const filtered = await call('nw_list_queries', { project: '6ec9249b8de0a586', tag: 'odd', limit: 100 });
+    expect((filtered.structuredContent as { total: number }).total).toBe(15);
+    const arabic = await call('nw_list_queries', { project: '6ec9249b8de0a586', keyword: 'ديكورات' });
+    expect((arabic.structuredContent as { queries: unknown[] }).queries).toHaveLength(1);
+  });
+
+  it('caps large recommendation lists and reports totals', async () => {
+    const result = await call('nw_get_recommendations', { query: 'c1f8fbd2b38960d3' });
+    const data = result.structuredContent as { terms: { content_extended: unknown[]; content_extended_total: number }; competitors: unknown[]; competitors_total: number };
+    expect(data.terms.content_extended).toHaveLength(60);
+    expect(data.terms.content_extended_total).toBe(80);
+    expect(data.competitors).toHaveLength(10);
+    expect(data.competitors_total).toBe(27);
+  });
+
+  it('round-trips Arabic content byte-identical', async () => {
+    const got = await call('nw_get_content', { query: 'c1f8fbd2b38960d3' });
+    expect((got.structuredContent as { html: string }).html).toBe(ARABIC_HTML);
+    await call('nw_import_content', { query: 'c1f8fbd2b38960d3', html: ARABIC_HTML, title: 'ديكورات مكة' });
+    expect(backend.calls).toContain(`importContent:${ARABIC_HTML}`);
+  });
+});
+
+describe('errors and safety', () => {
+  it('rejects malformed ids as an actionable tool error', async () => {
+    const result = await call('nw_get_content', { query: '../../backend/delete-project' });
+    expect(result.isError).toBe(true);
+    expect(text(result)).toContain('16 lowercase hex characters');
+    expect(backend.calls).toEqual([]);
+  });
+
+  it('rejects unknown arguments', async () => {
+    const result = await call('nw_status', { surprise: true });
+    expect(result.isError).toBe(true);
+  });
+
+  it('turns an expired session into a next step', async () => {
+    backend.failWith = new SessionExpiredError();
+    const result = await call('nw_list_projects');
+    expect(result.isError).toBe(true);
+    expect(text(result)).toContain('npm run login');
+  });
+
+  it('passes plan-limit messages through', async () => {
+    backend.failWith = new PlanLimitError('The analysis exceeds the number of keyword analyses available for this month.');
+    const result = await call('nw_status');
+    expect(text(result)).toContain('exceeds the number of keyword analyses');
+    expect(text(result)).toContain('Next step');
+  });
+
+  it('returns an existing analysis instead of spending a credit', async () => {
+    const result = await call('nw_create_query', { project: '6ec9249b8de0a586', keyword: '  ديكورات   مكة ', engine: 'google.com.sa', language: 'Arabic', confirm: true });
+    expect(result.structuredContent).toMatchObject({ query_id: 'c1f8fbd2b38960d3', existing: true, spent_analysis: false });
+    expect(backend.calls.some((c) => c.startsWith('createQuery'))).toBe(false);
+  });
+
+  it('refuses to spend an analysis without confirm', async () => {
+    const result = await call('nw_create_query', { project: '6ec9249b8de0a586', keyword: 'new keyword', engine: 'google.com', language: 'English' });
+    expect(result.isError).toBe(true);
+    expect(text(result)).toContain('ask for approval');
+    expect(backend.calls.some((c) => c.startsWith('createQuery'))).toBe(false);
+  });
+
+  it('creates the analysis once confirmed', async () => {
+    const result = await call('nw_create_query', { project: '6ec9249b8de0a586', keyword: 'new keyword', engine: 'google.com', language: 'English', confirm: true });
+    expect(result.structuredContent).toMatchObject({ query_id: 'abcdefabcdefabcd', existing: false, spent_analysis: true });
+  });
+
+  it('rejects keywords with characters NeuronWriter forbids', async () => {
+    const result = await call('nw_create_query', { project: '6ec9249b8de0a586', keyword: 'running:shoes', engine: 'google.com', language: 'English', confirm: true });
+    expect(result.isError).toBe(true);
+    expect(backend.calls).toEqual([]);
+  });
+
+  it('refuses AI generation without confirm', async () => {
+    const result = await call('nw_generate_outline', { query: 'c1f8fbd2b38960d3' });
+    expect(result.isError).toBe(true);
+    expect(backend.calls).toEqual([]);
+    const confirmed = await call('nw_generate_outline', { query: 'c1f8fbd2b38960d3', confirm: true });
+    expect(confirmed.structuredContent).toMatchObject({ ai_credits: 120 });
+  });
+});

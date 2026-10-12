@@ -1,0 +1,9 @@
+{
+  "word_count": 407,
+  "readability": 42,
+  "keywords_matched": ["ديكورات", "مكة"],
+  "overall_score": 9,
+  "score_parts": { "meta": 10, "headers": 5, "terms": 9, "balance": 12 },
+  "subscore_parts": { "h1_score": 0, "h2_score": 0, "basic_score": 9, "extended_score": 3 },
+  "overall_score_details": "<div class=\"text-left\">…</div>"
+}

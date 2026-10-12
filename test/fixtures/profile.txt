@@ -1,0 +1,18 @@
+Subscription
+Neuron-Bronze-AppSumo
+valid for lifetime
+Monthly limits usage:
+
+Content writer:
+3 used / 25 per month
+AI credits:
+1,250 used / 15000 per month
+Monthly limits reset:
+2026-10-12 17:30 UTC
+
+Plan usage:
+
+Projects:
+2 used / 2 in your plan
+Monitored prompts:
+0 used / 5 in your plan

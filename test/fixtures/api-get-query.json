@@ -1,0 +1,22 @@
+{
+  "_note": "API v0.5 get-query shape per docs/api/api-docs.md; values illustrative.",
+  "status": "ready",
+  "keyword": "trail running shoes",
+  "metrics": { "word_count": { "median": 1500, "target": 1800 }, "readability": { "median": 60, "target": 62 } },
+  "terms_txt": {
+    "title": "trail running shoes\nbest trail shoes",
+    "desc_title": "trail running",
+    "h1": "trail running shoes",
+    "h2": "traction\ncushioning",
+    "content_basic": "trail running shoe\ntraction",
+    "content_basic_w_ranges": "trail running shoe: 6-21x\ntraction: 1-8x\nodd line",
+    "content_extended": "rock plate\nlugs",
+    "entities": "Salomon, Hoka"
+  },
+  "ideas": {
+    "suggest_questions": [{ "q": "Are trail shoes worth it?" }],
+    "people_also_ask": [{ "q": "Can you run on roads with trail shoes?" }],
+    "content_questions": ["Are trail shoes worth it?"]
+  },
+  "competitors": [{ "rank": 1, "url": "https://shop.example/trail", "title": "Best Trail Shoes", "content_score": 71 }]
+}
