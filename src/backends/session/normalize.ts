@@ -3,8 +3,8 @@
 
 import { NeuronWriterError, PlanLimitError, RetryableError, SessionExpiredError, isPlanLimitMessage } from '../../errors.js';
 import { sanitizeExternalText } from '../../sanitize.js';
-import { analysisUrl, type AccountStatus, type Competitor, type QuerySummary, type Recommendations, type Score, type TermRange, type Usage } from '../Backend.js';
-import type { InPageResponse, RawAnalysisPage, RawQueryRow } from './pageScripts.js';
+import { analysisUrl, type AccountStatus, type Competitor, type ContentPlanIdea, type ProjectSettings, type ProjectSettingsPatch, type QuerySummary, type Recommendations, type Score, type TermRange, type Usage } from '../Backend.js';
+import type { InPageResponse, RawAnalysisPage, RawContentPlanIdea, RawQueryRow } from './pageScripts.js';
 
 const toNumber = (value: unknown): number | null => {
   if (value === null || value === undefined || value === '' || value === 'null') return null;
@@ -37,6 +37,13 @@ export function normalizeAnalysisPage(queryId: string, raw: RawAnalysisPage): Re
   const titles = Array.isArray(raw.competitorTitles) ? raw.competitorTitles : [];
   const scores = Array.isArray(raw.competitorScores) ? raw.competitorScores : [];
   const words = Array.isArray(raw.competitorWords) ? raw.competitorWords : [];
+  const headingsByUrl = new Map<string, Array<{ level: number; text: string }>>();
+  for (const card of raw.competitorHeadings ?? []) {
+    const headings = card.headings
+      .map((h) => ({ level: h.level, text: sanitizeExternalText(h.text, 200) }))
+      .filter((h): h is { level: number; text: string } => h.text !== null && h.level >= 1);
+    if (card.url) headingsByUrl.set(card.url, headings);
+  }
   const competitors: Competitor[] = [];
   for (const key of Object.keys(urls).sort((a, b) => Number(a) - Number(b))) {
     const index = Number(key);
@@ -48,6 +55,7 @@ export function normalizeAnalysisPage(queryId: string, raw: RawAnalysisPage): Re
       title: sanitizeExternalText(titles[index]),
       content_score: toNumber(scores[index]),
       word_count: toNumber(words[index]),
+      headings: headingsByUrl.get(String(urls[key])) ?? [],
     });
   }
   const headingIdeas = Array.isArray(raw.headingIdeas)
@@ -67,7 +75,10 @@ export function normalizeAnalysisPage(queryId: string, raw: RawAnalysisPage): Re
       h2: stringList(raw.h2),
       entities: stringList(raw.entities),
     },
-    ideas: { headings: headingIdeas.map((h) => sanitizeExternalText(h)).filter((h): h is string => h !== null), questions: [] },
+    ideas: {
+      headings: headingIdeas.map((h) => sanitizeExternalText(h)).filter((h): h is string => h !== null),
+      questions: (raw.questions ?? []).map((q) => sanitizeExternalText(q)).filter((q): q is string => q !== null),
+    },
     competitors,
   };
 }
@@ -123,7 +134,11 @@ export function interpretResponse(response: InPageResponse): Record<string, unkn
   }
   if (!data || typeof data !== 'object') return { value: data };
   const message = errorText(data);
-  if (message) throw isPlanLimitMessage(message) ? new PlanLimitError(message) : new NeuronWriterError(message);
+  const outOfAiCredits = (data as Record<string, unknown>).ai_credits === 'yes';
+  if (message || outOfAiCredits) {
+    const text = message ?? 'Not enough AI credits.';
+    throw outOfAiCredits || isPlanLimitMessage(text) ? new PlanLimitError(text) : new NeuronWriterError(text);
+  }
   return data as Record<string, unknown>;
 }
 
@@ -131,6 +146,8 @@ function errorText(data: unknown): string | null {
   if (!data || typeof data !== 'object') return null;
   const record = data as Record<string, unknown>;
   if (typeof record.error === 'string' && record.error) return record.error;
+  if (Array.isArray(record.errors) && record.errors.length) return record.errors.map(String).join(' ');
+  if (typeof record.errors === 'string' && record.errors) return record.errors;
   if (record.status === 'error') return typeof record.message === 'string' ? record.message : 'NeuronWriter reported an error.';
   return null;
 }
@@ -149,4 +166,99 @@ export function parseProfileText(text: string): Omit<AccountStatus, 'backend' | 
     projects: usage(text, 'Projects'),
     resets_at: text.match(/Monthly limits reset\s*:?\s*(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}(?:\s*UTC)?)/i)?.[1] ?? null,
   };
+}
+
+/** "14800 (99%) AI credits left out of 15000 …" (inside ai_usage_info HTML) → "14800 of 15000 AI credits left". */
+export function parseAiUsage(html: unknown): string | null {
+  const match = String(html ?? '').match(/([\d,]+)\s*\(\d+%\)\s*AI credits left out of\s*([\d,]+)/i);
+  return match ? `${match[1]} of ${match[2]} AI credits left` : htmlToText(html);
+}
+
+/** Visible text of an HTML snippet (usage notes NeuronWriter returns as HTML). */
+export function htmlToText(html: unknown): string | null {
+  if (typeof html !== 'string' || !html.trim()) return null;
+  return html.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim() || null;
+}
+
+/** Tags cell text ("Optimize,Deleted") → ["Optimize", "Deleted"]. */
+export function splitTags(text: string | null): string[] {
+  return (text ?? '').split(',').map((t) => t.trim()).filter(Boolean);
+}
+
+const lines = (value: unknown): string[] =>
+  (Array.isArray(value) ? value.map(String) : String(value ?? '').split('\n')).map((l) => l.trim()).filter(Boolean);
+
+export function normalizeContentPlan(rows: RawContentPlanIdea[]): ContentPlanIdea[] {
+  return rows.map((row) => ({
+    id: row.id,
+    keyword: row.keyword,
+    additional_keywords: row.additionalKeywords.split(',').map((k) => k.trim()).filter(Boolean),
+    added: row.added,
+    assigned_to: row.assignedTo || null,
+    expected: row.expected || null,
+  }));
+}
+
+/** Form fields (update-project-settings names) + keyword lists → ProjectSettings. */
+export function toProjectSettings(projectId: string, form: Record<string, unknown>, keywords: Record<string, unknown>): ProjectSettings {
+  const text = (key: string) => String(form[key] ?? '');
+  return {
+    project_id: projectId,
+    mode: form.mode === 'domain' ? 'domain' : 'nondomain',
+    name: text('name'),
+    homepage: text('homepage'),
+    engine: text('engine'),
+    language: text('language'),
+    treat_title_as_h1: Boolean(form.treat_title_as_h1),
+    disable_long_terms: Boolean(form.disable_terms_len_4),
+    keywords: { desired: lines(keywords.desired), brand: lines(keywords.brand), negative: lines(keywords.negative), competitors: lines(keywords.competitors) },
+    domains: { competitors: lines(form.competitors), excluded: lines(form.exclude) },
+    ai_profile: {
+      overview: text('ai_overview_project'),
+      products_pricing: text('ai_overview_product_pricing'),
+      labeling_entities: text('ai_overview_labeling_entities'),
+      personas: text('ai_overview_labeling_personas'),
+      brand_voice: text('ai_overview_brand_voice'),
+    },
+    report_contact_info: text('contact_info'),
+    wordpress: {
+      user: text('wordpress_rest_api_name'),
+      password_set: text('wordpress_rest_api_password') !== '',
+      subdirectory: Boolean(form.wordpress_rest_api_subdir),
+      subdirectory_url: text('wordpress_rest_api_subdir_loc'),
+    },
+  };
+}
+
+/**
+ * The full update-project-settings body: current values with the patch on top.
+ * Fields the patch does not mention (WordPress credentials included) are sent
+ * back unchanged, exactly like the app's Save button.
+ */
+export function applySettingsPatch(form: Record<string, unknown>, keywords: Record<string, unknown>, patch: ProjectSettingsPatch): Record<string, unknown> {
+  const joined = (list: string[] | undefined, current: unknown) => (list ? list.join('\n') : lines(current).join('\n'));
+  const body: Record<string, unknown> = {
+    ...form,
+    custom_logo: '',
+    project_keywords: joined(patch.keywords?.desired, keywords.desired),
+    brand_keywords: joined(patch.keywords?.brand, keywords.brand),
+    negative_keywords: joined(patch.keywords?.negative, keywords.negative),
+    competitors_keywords: joined(patch.keywords?.competitors, keywords.competitors),
+  };
+  if (patch.name !== undefined) body.name = patch.name;
+  if (patch.homepage !== undefined) body.homepage = patch.homepage;
+  if (patch.engine !== undefined) body.engine = patch.engine;
+  if (patch.language !== undefined) body.language = patch.language;
+  if (patch.treat_title_as_h1 !== undefined) body.treat_title_as_h1 = patch.treat_title_as_h1;
+  if (patch.disable_long_terms !== undefined) body.disable_terms_len_4 = patch.disable_long_terms;
+  if (patch.report_contact_info !== undefined) body.contact_info = patch.report_contact_info;
+  if (patch.domains?.competitors) body.competitors = patch.domains.competitors.join('\n');
+  if (patch.domains?.excluded) body.exclude = patch.domains.excluded.join('\n');
+  const ai = patch.ai_profile ?? {};
+  if (ai.overview !== undefined) body.ai_overview_project = ai.overview;
+  if (ai.products_pricing !== undefined) body.ai_overview_product_pricing = ai.products_pricing;
+  if (ai.labeling_entities !== undefined) body.ai_overview_labeling_entities = ai.labeling_entities;
+  if (ai.personas !== undefined) body.ai_overview_labeling_personas = ai.personas;
+  if (ai.brand_voice !== undefined) body.ai_overview_brand_voice = ai.brand_voice;
+  return body;
 }

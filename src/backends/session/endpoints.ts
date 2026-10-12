@@ -17,7 +17,13 @@ export const ENDPOINTS = {
   markContentAsDone: { path: '/backend/mark-content-as-done', kind: 'write', spendsCredits: false },
   unmarkContentAsDone: { path: '/backend/unmark-content-as-done', kind: 'write', spendsCredits: false },
   newAnalysis: { path: '/backend/new-analysis', kind: 'write', spendsCredits: true },
-  generateAiOutline: { path: '/backend/generate-ai-outline', kind: 'write', spendsCredits: true },
+  generateAiContent: { path: '/backend/generate-ai-content', kind: 'write', spendsCredits: true },
+  autoImportContent: { path: '/backend/auto-import-content', kind: 'read', spendsCredits: false },
+  updateTagsStatus: { path: '/backend/update-tags-status', kind: 'write', spendsCredits: false },
+  selectCompetitors: { path: '/backend/analysis-select-competitors', kind: 'write', spendsCredits: false },
+  addToContentPlan: { path: '/backend/manual-add-to-content-plan', kind: 'write', spendsCredits: false },
+  getProjectSettings: { path: '/backend/get-project-settings', kind: 'read', spendsCredits: false },
+  updateProjectSettings: { path: '/backend/update-project-settings', kind: 'write', spendsCredits: false },
 } as const satisfies Record<string, Endpoint>;
 
 export type EndpointName = keyof typeof ENDPOINTS;
@@ -25,6 +31,8 @@ export type EndpointName = keyof typeof ENDPOINTS;
 /** Never called by this server: destructive, sharing, billing or account-level. */
 export const FORBIDDEN_ENDPOINTS = [
   'delete-project',
+  'delete-my-account',
+  'generate-ai-outline', // dead code in the web app; answers HTTP 500 (2026-10-13)
   'add-analysis-access',
   'revoke-analysis-access',
   'update-share-analysis-link',
@@ -41,6 +49,8 @@ export const PAGES = {
   home: '/',
   profile: '/ucp/profile',
   project: (projectId: string) => `/project/view/${projectId}/optimisation`,
+  projectSettings: (projectId: string) => `/project/view/${projectId}/settings`,
+  contentPlan: (projectId: string) => `/project/view/${projectId}/content-plan`,
   analysis: (queryId: string) => `/analysis/view/${queryId}`,
 };
 

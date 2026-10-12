@@ -6,7 +6,7 @@ import axios, { type AxiosInstance } from 'axios';
 import { NeuronWriterError, NotSupportedError, PlanLimitError, RetryableError, isPlanLimitMessage } from '../../errors.js';
 import { Limiter, type RequestKind } from '../../limiter.js';
 import { sanitizeExternalText } from '../../sanitize.js';
-import { analysisUrl, type AccountStatus, type Backend, type ContentInput, type ContentRevision, type CreateQueryInput, type Outline, type Project, type QuerySummary, type Recommendations, type Score, type TermRange } from '../Backend.js';
+import { analysisUrl, type AccountStatus, type Backend, type ContentInput, type ContentRevision, type CreateQueryInput, type AiResult, type ContentPlanIdea, type PageContent, type Project, type ProjectSettings, type QuerySummary, type Recommendations, type Score, type TermRange } from '../Backend.js';
 
 const API_ENDPOINT = 'https://app.neuronwriter.com/neuron-api/0.5/writer';
 
@@ -92,8 +92,36 @@ export class ApiBackend implements Backend {
     return { query_id: typeof data.query === 'string' ? data.query : null };
   }
 
-  async generateOutline(): Promise<Outline> {
+  async generateAi(): Promise<AiResult> {
     throw new NotSupportedError('AI generation', this.name);
+  }
+
+  async setTags(): Promise<void> {
+    throw new NotSupportedError('Editing tags', this.name);
+  }
+
+  async selectCompetitors(): Promise<string[]> {
+    throw new NotSupportedError('Selecting competitors', this.name);
+  }
+
+  async fetchPage(): Promise<PageContent> {
+    throw new NotSupportedError('Fetching a page', this.name);
+  }
+
+  async listContentPlan(): Promise<ContentPlanIdea[]> {
+    throw new NotSupportedError('The content plan', this.name);
+  }
+
+  async addContentPlanIdea(): Promise<void> {
+    throw new NotSupportedError('The content plan', this.name);
+  }
+
+  async getProjectSettings(): Promise<ProjectSettings> {
+    throw new NotSupportedError('Project settings', this.name);
+  }
+
+  async updateProjectSettings(): Promise<ProjectSettings> {
+    throw new NotSupportedError('Project settings', this.name);
   }
 
   async close(): Promise<void> {}
@@ -161,6 +189,7 @@ export function normalizeApiQuery(queryId: string, raw: Record<string, unknown>)
       title: sanitizeExternalText(c.title),
       content_score: typeof c.content_score === 'number' ? c.content_score : null,
       word_count: null,
+      headings: [],
     })),
   };
 }

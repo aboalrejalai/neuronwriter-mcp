@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { normalizeApiQuery, parseRangeLine } from '../src/backends/api/ApiBackend.js';
-import { interpretResponse, normalizeAnalysisPage, normalizeQueryRows, normalizeScore, parseProfileText, pickRevision } from '../src/backends/session/normalize.js';
+import { applySettingsPatch, interpretResponse, parseAiUsage, normalizeAnalysisPage, normalizeContentPlan, normalizeQueryRows, normalizeScore, parseProfileText, pickRevision, toProjectSettings } from '../src/backends/session/normalize.js';
 import { NeuronWriterError, PlanLimitError, RetryableError, SessionExpiredError } from '../src/errors.js';
 
 const fixture = (name: string) => readFileSync(new URL(`./fixtures/${name}`, import.meta.url), 'utf8');
@@ -22,7 +22,12 @@ describe('session: analysis page', () => {
 
   it('builds competitors, skips empty URLs and strips hidden characters', () => {
     expect(rec.competitors).toHaveLength(2);
-    expect(rec.competitors[0]).toEqual({ rank: 1, url: 'https://decor-one.example/', title: 'ديكورات مكة - روائع الديكور', content_score: 54, word_count: 930 });
+    expect(rec.competitors[0]).toEqual({
+      rank: 1, url: 'https://decor-one.example/', title: 'ديكورات مكة - روائع الديكور', content_score: 54, word_count: 930,
+      headings: [{ level: 1, text: 'ديكورات مكة' }, { level: 2, text: 'أعمالنا' }],
+    });
+    expect(rec.competitors[1].headings).toEqual([]);
+    expect(rec.ideas.questions).toEqual(['من هو أفضل معلم ديكورات في مكة؟', 'كم تكلفة ديكورات الجبس؟']);
     expect(rec.competitors[1].url).toBe('https://decor-two.example/evil');
     expect(rec.competitors[1].title).toBe('Second competitor title');
   });
@@ -110,5 +115,50 @@ describe('api backend mapping', () => {
     expect(rec.terms.entities).toEqual(['Salomon', 'Hoka']);
     expect(rec.ideas.questions).toEqual(['Are trail shoes worth it?', 'Can you run on roads with trail shoes?']);
     expect(rec.competitors[0]).toMatchObject({ rank: 1, url: 'https://shop.example/trail', content_score: 71 });
+  });
+});
+
+describe('session: project settings', () => {
+  const form = {
+    mode: 'domain', name: 'makkahdecorsa.com', homepage: 'https://makkahdecorsa.com', engine: 'google.com.sa', language: 'Arabic', currency: '',
+    competitors: 'a.com\nb.com', exclude: '', disable_terms_len_4: false, treat_title_as_h1: false,
+    wordpress_rest_api_name: 'admin', wordpress_rest_api_password: 'xxxx yyyy', wordpress_rest_api_subdir: false, wordpress_rest_api_subdir_loc: '',
+    use_custom_logo: false, custom_logo: '', contact_info: '', ai_overview_project: 'old overview', ai_overview_product_pricing: '',
+    ai_overview_labeling_entities: '', ai_overview_labeling_personas: '', ai_overview_brand_voice: '',
+  };
+  const keywords = { desired: 'ديكورات\nمكة', brand: '', negative: '', competitors: '' };
+
+  it('never exposes the WordPress password', () => {
+    const settings = toProjectSettings('6ec9249b8de0a586', form, keywords);
+    expect(settings.wordpress).toEqual({ user: 'admin', password_set: true, subdirectory: false, subdirectory_url: '' });
+    expect(JSON.stringify(settings)).not.toContain('xxxx');
+    expect(settings.keywords.desired).toEqual(['ديكورات', 'مكة']);
+    expect(settings.domains.competitors).toEqual(['a.com', 'b.com']);
+  });
+
+  it('sends every field back and changes only the patch', () => {
+    const body = applySettingsPatch(form, keywords, { ai_profile: { brand_voice: 'ودود' }, keywords: { brand: ['روائع الديكور'] } });
+    expect(body).toMatchObject({
+      name: 'makkahdecorsa.com', engine: 'google.com.sa', competitors: 'a.com\nb.com',
+      wordpress_rest_api_name: 'admin', wordpress_rest_api_password: 'xxxx yyyy',
+      ai_overview_project: 'old overview', ai_overview_brand_voice: 'ودود',
+      project_keywords: 'ديكورات\nمكة', brand_keywords: 'روائع الديكور',
+    });
+  });
+});
+
+describe('session: content plan', () => {
+  it('splits supporting keywords', () => {
+    expect(normalizeContentPlan([{ id: '3f8ad79c0eaab3c8', keyword: 'ديكورات جدة', added: '2026-01-05', assignedTo: '', expected: '', additionalKeywords: 'ديكورات جدة, ديكورات جده' }])).toEqual([
+      { id: '3f8ad79c0eaab3c8', keyword: 'ديكورات جدة', additional_keywords: ['ديكورات جدة', 'ديكورات جده'], added: '2026-01-05', assigned_to: null, expected: null },
+    ]);
+  });
+});
+
+describe('session: AI usage', () => {
+  it('extracts credits left from the usage tooltip HTML', () => {
+    const html = '<span data-bs-original-title="14800 (99%) AI credits left out of 15000 AI credits per month in your plan." data-bs-html="true"> 99% monthly AI credits available</span>';
+    expect(parseAiUsage(html)).toBe('14800 of 15000 AI credits left');
+    expect(parseAiUsage('<b>other</b> text')).toBe('other text');
   });
 });

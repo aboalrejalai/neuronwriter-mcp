@@ -2,17 +2,114 @@
   "_note": "Shape of readAnalysisPage() on /analysis/view/<id>, recorded 2026-10-12. Values trimmed; competitor URLs replaced with example domains.",
   "ready": true,
   "documentTitle": "ديكورات مكة - analysis details | NEURONwriter - powered by CONTADU",
-  "targets": { "wordCount": 1034, "readability": 20 },
-  "basic": [{ "مكة": { "min": 10, "max": 32 } }, { "مكه": { "min": 2, "max": 21 } }, { "ديكورات": { "min": 0, "max": 15 } }],
-  "extended": [{ "دهانات وديكورات مكة": { "min": 1, "max": 1 } }, { "معلم دهانات وديكورات مكة": { "min": 1, "max": 1 } }],
-  "title": ["مكة", "ديكورات"],
-  "description": ["ديكورات", "مكة"],
-  "h1": ["مكة", "ديكورات"],
-  "h2": ["مكة", "معلم دهانات وديكورات"],
-  "entities": ["مكة", "ورق"],
-  "headingIdeas": [["أفضل معلم دهانات وديكورات في مكة", 170], ["روعة الديكور - أفضل معلم ديكورات في مكة", 160]],
-  "competitorUrls": { "0": "https://decor-one.example/", "1": "https://decor-two.example/‮evil", "2": "" },
-  "competitorTitles": ["ديكورات مكة - روائع الديكور", "Second competitor​ title"],
-  "competitorScores": [54, 0, "null"],
-  "competitorWords": [930, 35, 35]
+  "targets": {
+    "wordCount": 1034,
+    "readability": 20
+  },
+  "basic": [
+    {
+      "مكة": {
+        "min": 10,
+        "max": 32
+      }
+    },
+    {
+      "مكه": {
+        "min": 2,
+        "max": 21
+      }
+    },
+    {
+      "ديكورات": {
+        "min": 0,
+        "max": 15
+      }
+    }
+  ],
+  "extended": [
+    {
+      "دهانات وديكورات مكة": {
+        "min": 1,
+        "max": 1
+      }
+    },
+    {
+      "معلم دهانات وديكورات مكة": {
+        "min": 1,
+        "max": 1
+      }
+    }
+  ],
+  "title": [
+    "مكة",
+    "ديكورات"
+  ],
+  "description": [
+    "ديكورات",
+    "مكة"
+  ],
+  "h1": [
+    "مكة",
+    "ديكورات"
+  ],
+  "h2": [
+    "مكة",
+    "معلم دهانات وديكورات"
+  ],
+  "entities": [
+    "مكة",
+    "ورق"
+  ],
+  "headingIdeas": [
+    [
+      "أفضل معلم دهانات وديكورات في مكة",
+      170
+    ],
+    [
+      "روعة الديكور - أفضل معلم ديكورات في مكة",
+      160
+    ]
+  ],
+  "competitorUrls": {
+    "0": "https://decor-one.example/",
+    "1": "https://decor-two.example/‮evil",
+    "2": ""
+  },
+  "competitorTitles": [
+    "ديكورات مكة - روائع الديكور",
+    "Second competitor​ title"
+  ],
+  "competitorScores": [
+    54,
+    0,
+    "null"
+  ],
+  "competitorWords": [
+    930,
+    35,
+    35
+  ],
+  "questions": [
+    "من هو أفضل معلم ديكورات في مكة؟",
+    "كم تكلفة ديكورات الجبس؟"
+  ],
+  "competitorHeadings": [
+    {
+      "url": "https://decor-one.example/",
+      "headings": [
+        {
+          "level": 1,
+          "text": "ديكورات مكة"
+        },
+        {
+          "level": 2,
+          "text": "أعمالنا‮"
+        },
+        {
+          "level": 0,
+          "text": "ignored"
+        }
+      ]
+    }
+  ]
 }

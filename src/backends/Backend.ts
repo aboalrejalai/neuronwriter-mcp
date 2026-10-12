@@ -48,6 +48,8 @@ export interface Competitor {
   title: string | null;
   content_score: number | null;
   word_count: number | null;
+  /** The competitor page's H1-H3 outline, in order. */
+  headings: Array<{ level: number; text: string }>;
 }
 
 export interface Recommendations {
@@ -98,10 +100,72 @@ export interface CreateQueryInput {
   additional_keywords?: string[];
 }
 
-export interface Outline {
-  content: string;
-  ai_credits: number | null;
+export const AI_KINDS = ['outline', 'meta', 'intro', 'paragraph', 'faq', 'rephrase', 'expand', 'article'] as const;
+export type AiKind = (typeof AI_KINDS)[number];
+export const AI_TONES = ['neutral', 'expert', 'formal', 'informal', 'witty', 'funny', 'serious', 'respectful', 'motivating'] as const;
+export const AI_MODELS = { default: 0, 'gpt-5': 2, claude: 3, gemini: 4 } as const;
+export type AiModel = keyof typeof AI_MODELS;
+
+export interface AiRequest {
+  kind: AiKind;
+  title?: string;
+  /** Text to rephrase/expand, or bullet points for intro/paragraph. */
+  text?: string;
+  /** Heading of the paragraph to write. */
+  heading?: string;
+  tone?: (typeof AI_TONES)[number];
+  word_count?: number;
+  model?: AiModel;
 }
+
+export interface AiResult {
+  content: string;
+  /** Meta title (kind "meta"; content is then the meta description). */
+  title: string | null;
+  usage: string | null;
+}
+
+export interface PageContent {
+  url: string;
+  title: string;
+  description: string;
+  html: string;
+}
+
+export interface ContentPlanIdea {
+  id: string;
+  keyword: string;
+  additional_keywords: string[];
+  added: string | null;
+  assigned_to: string | null;
+  expected: string | null;
+}
+
+export interface ProjectSettings {
+  project_id: string;
+  mode: 'domain' | 'nondomain';
+  name: string;
+  homepage: string;
+  engine: string;
+  language: string;
+  treat_title_as_h1: boolean;
+  disable_long_terms: boolean;
+  keywords: { desired: string[]; brand: string[]; negative: string[]; competitors: string[] };
+  domains: { competitors: string[]; excluded: string[] };
+  ai_profile: { overview: string; products_pricing: string; labeling_entities: string; personas: string; brand_voice: string };
+  report_contact_info: string;
+  /** The application password itself is never returned. */
+  wordpress: { user: string; password_set: boolean; subdirectory: boolean; subdirectory_url: string };
+}
+
+/** Settings the tools may change. WordPress credentials, logo and currency are left as they are. */
+export type ProjectSettingsPatch = Partial<Pick<ProjectSettings, 'name' | 'homepage' | 'engine' | 'language' | 'treat_title_as_h1' | 'disable_long_terms' | 'report_contact_info'>> & {
+  keywords?: Partial<ProjectSettings['keywords']>;
+  domains?: Partial<ProjectSettings['domains']>;
+  ai_profile?: Partial<ProjectSettings['ai_profile']>;
+};
+
+export type CompetitorSelection = { mode: 'top10' | 'top30' } | { mode: 'custom'; keep_urls: string[] };
 
 export interface Backend {
   readonly name: BackendName;
@@ -117,7 +181,18 @@ export interface Backend {
   /** Spends 1 Content Writer analysis. Returns the new query id once it is listed. */
   createQuery(input: CreateQueryInput, signal?: AbortSignal): Promise<{ query_id: string | null }>;
   /** Spends AI credits. */
-  generateOutline(queryId: string, signal?: AbortSignal): Promise<Outline>;
+  generateAi(queryId: string, request: AiRequest, signal?: AbortSignal): Promise<AiResult>;
+  /** Replaces the analysis' tags (the "Done"/"Deleted" statuses are tags too). */
+  setTags(projectId: string, queryId: string, tags: string[], signal?: AbortSignal): Promise<void>;
+  /** Changes which competitors the analysis is computed from; returns the selected URLs. */
+  selectCompetitors(queryId: string, selection: CompetitorSelection, signal?: AbortSignal): Promise<string[]>;
+  /** NeuronWriter fetches a URL and extracts its title, description and body (nothing is saved). */
+  fetchPage(queryId: string, url: string, signal?: AbortSignal): Promise<PageContent>;
+  listContentPlan(projectId: string, signal?: AbortSignal): Promise<ContentPlanIdea[]>;
+  addContentPlanIdea(projectId: string, keyword: string, additionalKeywords: string[], signal?: AbortSignal): Promise<void>;
+  getProjectSettings(projectId: string, signal?: AbortSignal): Promise<ProjectSettings>;
+  /** Reads every setting, applies the patch and saves the whole form (the app's only way to save). */
+  updateProjectSettings(projectId: string, patch: ProjectSettingsPatch, signal?: AbortSignal): Promise<ProjectSettings>;
   close(): Promise<void>;
 }
 
