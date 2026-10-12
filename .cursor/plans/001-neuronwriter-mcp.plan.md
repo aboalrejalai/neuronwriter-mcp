@@ -40,9 +40,9 @@ Done in code, covered by fixture tests (34 passing), build clean:
 
 Verified live on 2026-10-13 after the owner's `npm run login` (`node scripts/smoke-live.mjs`, read-only, over real stdio): `nw_status` (Bronze, 0/25, resets 2026-11-12, so `/ucp/profile` is right), `nw_list_projects` (both projects), `nw_list_queries`, `nw_get_recommendations` (28 basic terms with ranges, 18 heading ideas, 27 competitors), `nw_get_content` (Arabic article intact), `nw_score_content` (score 9 = editor's 9; 408 vs 409 words; readability 42).
 
-Waiting on the owner: approval to try the writes live — `nw_import_content` + `nw_set_done` (no credits, but they change the saved article/flag), one `nw_create_query` (1 of 25) and one `nw_generate_outline` (AI credits).
+Update 2026-10-13 (v0.3.0): owner approved live writes and a small credit spend. All write tools verified (import round-trips byte-identical, set_done, create_query + dedupe, recommendations wait). A full read-only crawl + 4 parallel reviews mapped all 136 endpoints → `docs/capability-map.md`. Added 7 tools (17 total), all tried live; AI moved to `generate-ai-content` templates (outline + meta verified; other kinds not tried yet). Spent so far: 1/25 analyses, 200/15000 AI credits.
 
-Open TODOs: questions (PAA) are not in page globals; done state is not in the queries table; tag-update endpoint unknown; `generate-ai-content` templates (36) not wired; TASK-015 evals + registration + release.
+Open TODOs: try the remaining AI kinds live; the 🟡 rows of `docs/capability-map.md` (custom terms, targets, person/deadline, WordPress, AI Visibility, inventory); TASK-015 evals.
 
 ## 1. Requirements & Constraints
 - **REQ-001**: Works on the Bronze plan with no API key — session (cookie) based.

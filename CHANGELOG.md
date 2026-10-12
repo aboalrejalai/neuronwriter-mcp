@@ -4,6 +4,25 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-13
+
+### Added
+- `nw_get_project_settings`, `nw_update_project_settings` (name, domain, engine, language, keyword lists, domains, AI Profile; the rest is saved back unchanged, the WordPress password is never returned).
+- `nw_list_content_plan`, `nw_add_content_plan_idea`.
+- `nw_update_tags` (add/remove; Done and Deleted are tags), `nw_select_competitors` (top 10 / top 30 / custom).
+- `nw_fetch_page`: read and score any live URL.
+- `nw_get_recommendations` now returns the questions and each competitor's H1-H3 outline.
+- `nw_list_queries` hides Done/Deleted analyses by default (`status` filter).
+- `docs/capability-map.md`: everything NeuronWriter can do, what is built, what is left.
+
+### Changed
+- `nw_generate_outline` → `nw_generate_ai` with kinds outline, meta, intro, paragraph, faq, rephrase, expand, article, on the app's own templates.
+
+### Fixed
+- AI outline returned HTTP 500: `generate-ai-outline` is dead code in the web app; generation now uses `generate-ai-content` like the app does.
+
+## [0.2.1] - 2026-10-13
+
 ### Fixed
 - Heading ideas were empty: the analysis page only fills them after its own load-time reads, which were blocked. Those reads (`get-content-revision`, `check-readability`, `get-project-asset`) are now allowed; every page-initiated write stays blocked.
 - Word count glued adjacent paragraphs together (394 instead of 409); block elements now break words.

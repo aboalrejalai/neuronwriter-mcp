@@ -1,6 +1,6 @@
 {
   "name": "neuronwriter-mcp",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "MCP server for NeuronWriter: API v0.5 tools today, browser-session backend next",
   "type": "module",
   "bin": {

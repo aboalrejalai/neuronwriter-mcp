@@ -19,6 +19,21 @@ Legend: **R** = read, **W** = write, **$** = spends analyses or AI credits, **�
 | `generate-ai-content` | W $ | — (later) | `{mode: 'template'|'ai-selection'|'expand'|…, project, analysis, language, text, template_params: {template: <id>, …per template}, temperature, range_index, range_length, prev_gen_id, high_quality, suggested_output_len, content}` | same as outline. 36 templates in `ai_templates_definition` (`blog-outline`, `intro-terms`, `faq-unusedterms`, `one-click-long-form`, …); each builds its own `template_params` |
 | `analysis-status` | R | — | `{analysis}` | collaboration "recently active" info, **not** readiness |
 
+### Added in v0.3.0 (all verified live 2026-10-13)
+
+| Endpoint | Kind | Tool | Request body | Response |
+|---|---|---|---|---|
+| `generate-ai-content` | W $ | `nw_generate_ai` | Content Designer outline: `{wizard_mode:'wizard-outline', mode:'template', project, analysis, language, text:'', template_params:{template:'content-designer-blog-outline', title, h1terms, h2terms, basicterms, extendedterms, entities, compoutlines:true, toneofvoice, content_requirements:''}, temperature:0.7, range_index:null, range_length:null, high_quality:0, content:''}`; meta: `wizard_mode:'wizard-meta'`, template `content-designer-meta-title-and-description` with `titleterms, titleexamples, descterms, descexamples, toneofvoice`; other templates: the editor form body (every field sent, `prev_gen_id:''`, `suggested_output_len`) | `{status, content, first_gen_content (meta title), ai_usage_info (HTML), gen_id}`; out of credits → `{status:'error', error, ai_credits:'yes'}`. Synchronous, ~8 s, ~100 credits each |
+| `auto-import-content` | R | `nw_fetch_page` | `{analysis, url, strip_choices:[], custom_class_or_id:'', custom_class_or_id_val:'', import_images_mode:'do-nothing'}` | `{status, content:{title, description, content}}` (nothing saved) |
+| `update-tags-status` | W | `nw_update_tags` | `{project, mode:'status', object_type:'analysis', object_id, value:'Tag1, Tag2', table_pos:null}` — full replace | `{status, affected_cells_data}` |
+| `analysis-select-competitors` | W | `nw_select_competitors` | `{analysis, include_mode:'TOP10'\|'TOP30'}` or `{analysis, exclude_choices:[urls]}` | `{status}`; reload to read the new selection |
+| `manual-add-to-content-plan` | W | `nw_add_content_plan_idea` | `{project, keyword, additional_keywords:'one\nper\nline'}` | `{status}` |
+| `get-project-settings` | R | `nw_get_project_settings` | `{tab:'', project}` | `{project_keywords:{desired, brand, negative, competitors}}` — other settings are in the page DOM |
+| `update-project-settings` | W | `nw_update_project_settings` | every field of the form (see `readProjectSettingsForm`), full replace | `{status}` |
+| `generate-ai-outline` | ⛔ | — | dead code in the app (no caller); answers HTTP 500 | — |
+
+Everything else the app can call, with bodies, is summarized in [`capability-map.md`](capability-map.md).
+
 ## Data that comes from pages, not endpoints
 
 - **Recommendations** — `/analysis/view/<id>` globals, read through the page's own functions:
@@ -26,13 +41,13 @@ Legend: **R** = read, **W** = write, **$** = spends analyses or AI credits, **�
   - `content_terms[term] = {importance, uses: {text|h1|h2|h3|title|description: [avg, usage_pc, [competitor counts…]]}}`
   - `all_entities`, `first_h2_ideas` (`[[heading, score]]`), `target_word_count`, `target_readability`
   - competitors: `urls_by_id[i]`, `meta_titles[i]`, `params_charts_datasets['content-score'][i]`, `['content-length-words'][i]` (rank = i+1)
-  - Questions (PAA etc.) were **not** found in globals — likely rendered HTML in the Ideas tab. TODO.
+  - Questions: server-rendered `#outline-questions li.content-draft-idea-question[data-idea-title]`; competitor H1-H3 outlines: `#outline-headings .content-draft-competitor` (`.competitor-url a`, `li.content-draft-idea-h1/h2/h3[title]`).
   - Not ready yet ⇔ `content_terms` missing or empty.
-- **Queries of a project** — `/project/view/<id>/optimisation`, DataTable `#analyses_table` (client-side, no ajax). Row id `analysis_tr_<id>`; columns `Query, Target URL, Created (tooltip = exact date), Engine (flag), Score, Saved, Words, Content Comp., Volume, Paid Comp., CPC, Person, Deadline, Tags`. Done state not visible in the table. TODO.
+- **Queries of a project** — `/project/view/<id>/optimisation`, DataTable `#analyses_table` (client-side, no ajax). Row id `analysis_tr_<id>`; columns `Query, Target URL, Created (tooltip = exact date), Engine (flag), Score, Saved, Words, Content Comp., Volume, Paid Comp., CPC, Person, Deadline, Tags`. Done/Deleted are tags in the hidden Tags column (13), read through the DataTable API.
 - **Projects** — side navigation links `/project/view/<id>?from=side` on every page. Owner's: `6ec9249b8de0a586` makkahdecorsa.com (holds `ديكورات مكة` = `c1f8fbd2b38960d3`), `21132423440d01e0` ديكورات.
 - **Plan and usage** — profile page text (`Content writer: N used / 25 per month`, `AI credits`, `Projects`, `Monthly limits reset`). URL `/ucp/profile` taken from the planning session; not re-verified.
 - **Engine / language values** — same as the API: `google.com.sa`, `Arabic` (full language name).
-- **Tags** — no tag-update endpoint identified; `nw_update_tags` is deferred.
+- **Tags** — `update-tags-status` (above).
 
 ## Full inventory (99)
 
