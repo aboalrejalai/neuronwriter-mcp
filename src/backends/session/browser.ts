@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { chromium, type BrowserContext, type Page } from 'playwright';
 import { log } from '../../log.js';
 import { APP_URL } from '../Backend.js';
-import { OWN_REQUEST_HEADER } from './endpoints.js';
+import { OWN_REQUEST_HEADER, PAGE_ALLOWED_READS } from './endpoints.js';
 
 export const DEFAULT_PROFILE_DIR = join(homedir(), '.neuronwriter-mcp', 'profile');
 const IDLE_CLOSE_MS = 10 * 60 * 1000;
@@ -32,9 +32,9 @@ export async function launchContext(dir: string, headless: boolean): Promise<Bro
 
 /**
  * One warm headless page on the owner's persistent profile. Launched on first
- * use, closed after 10 minutes idle. Only requests we send ourselves may reach
- * /backend/*: the editor's own autosave and polling are aborted, so opening an
- * analysis page can never change it.
+ * use, closed after 10 minutes idle. Only requests we send ourselves and the
+ * page's own load-time reads may reach /backend/*: the editor's autosave and
+ * every other write are aborted, so opening an analysis page can never change it.
  */
 export class BrowserSession {
   private context: BrowserContext | null = null;
@@ -60,7 +60,11 @@ export class BrowserSession {
     await context.route('**/*', (route) => {
       const request = route.request();
       if (BLOCKED_RESOURCES.has(request.resourceType())) return route.abort();
-      if (request.url().startsWith(`${APP_URL}/backend/`) && !request.headers()[OWN_REQUEST_HEADER]) return route.abort();
+      const url = request.url();
+      if (url.startsWith(`${APP_URL}/backend/`) && !request.headers()[OWN_REQUEST_HEADER]) {
+        const path = url.slice(`${APP_URL}/backend/`.length);
+        if (!PAGE_ALLOWED_READS.some((allowed) => path.startsWith(allowed))) return route.abort();
+      }
       return route.continue();
     });
     context.on('close', () => {

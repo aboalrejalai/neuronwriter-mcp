@@ -100,7 +100,8 @@ interface ContentArgs {
 /** Body of /backend/check-readability, built the way update_readability() builds it. */
 export function buildCheckReadabilityBody(args: ContentArgs): Record<string, unknown> {
   const holder = document.createElement('div');
-  holder.innerHTML = args.html;
+  // Break after block elements so words in adjacent paragraphs are not glued together.
+  holder.innerHTML = args.html.replace(/<\/(p|h[1-6]|li|div|blockquote|tr|td|th)>|<br\s*\/?>/gi, '$&\n');
   const text = (holder.textContent ?? '').trim();
   return {
     wizard_mode: typeof WIZARD_MODE !== 'undefined' ? WIZARD_MODE : '',
@@ -129,7 +130,8 @@ export function buildCheckReadabilityBody(args: ContentArgs): Record<string, unk
 /** Body of /backend/save-optimized-content, built the way save_content_changes() builds it. */
 export function buildSaveContentBody(args: ContentArgs): Record<string, unknown> {
   const holder = document.createElement('div');
-  holder.innerHTML = args.html;
+  // Break after block elements so words in adjacent paragraphs are not glued together.
+  holder.innerHTML = args.html.replace(/<\/(p|h[1-6]|li|div|blockquote|tr|td|th)>|<br\s*\/?>/gi, '$&\n');
   const text = (holder.textContent ?? '').trim();
   const termsToCheck: Record<string, unknown> = {};
   const terms = typeof content_terms !== 'undefined' && content_terms ? content_terms : {};
@@ -170,6 +172,11 @@ export function buildOutlineBody(): Record<string, unknown> {
     language: typeof analysis_language !== 'undefined' ? analysis_language : '',
     content_terms: get_content_terms_to_check(),
   };
+}
+
+/** Heading ideas arrive a few seconds after load, once the page's own reads finish. */
+export function headingIdeasLoaded(): boolean {
+  return typeof first_h2_ideas !== 'undefined';
 }
 
 export function readAnalysisSig(): string | null {

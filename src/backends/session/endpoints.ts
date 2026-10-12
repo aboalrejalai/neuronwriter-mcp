@@ -44,5 +44,11 @@ export const PAGES = {
   analysis: (queryId: string) => `/analysis/view/${queryId}`,
 };
 
-/** Header our own in-page requests carry; the browser blocks every other /backend/ call. */
+/** Header our own in-page requests carry; the browser blocks every other /backend/ call… */
 export const OWN_REQUEST_HEADER = 'x-nw-mcp';
+
+/**
+ * …except these reads the analysis page makes on its own load. Some page data
+ * (heading ideas) only appears after them. Writes such as autosave stay blocked.
+ */
+export const PAGE_ALLOWED_READS = ['get-content-revision', 'check-readability', 'get-project-asset/'] as const;

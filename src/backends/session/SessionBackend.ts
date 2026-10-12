@@ -9,6 +9,7 @@ import {
   buildCheckReadabilityBody,
   buildOutlineBody,
   buildSaveContentBody,
+  headingIdeasLoaded,
   looksLikeLoginPage,
   postFromPage,
   readAnalysisPage,
@@ -20,6 +21,7 @@ import {
 
 const NAVIGATION_TIMEOUT_MS = 45_000;
 const AI_TIMEOUT_MS = 10 * 60 * 1000;
+const HEADING_IDEAS_WAIT_MS = 10_000;
 
 /**
  * Drives NeuronWriter through the owner's logged-in browser profile: pages are
@@ -55,6 +57,9 @@ export class SessionBackend implements Backend {
 
   async getRecommendations(queryId: string, signal?: AbortSignal): Promise<Recommendations> {
     const page = await this.open(PAGES.analysis(queryId), signal);
+    if (await page.evaluate(readAnalysisSig)) {
+      await page.waitForFunction(headingIdeasLoaded, null, { timeout: HEADING_IDEAS_WAIT_MS }).catch(() => undefined);
+    }
     return normalizeAnalysisPage(queryId, await page.evaluate(readAnalysisPage));
   }
 
