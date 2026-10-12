@@ -1,33 +1,38 @@
 # NeuronWriter internal endpoints (`/backend/*`)
 
-Captured 2026-10-12 from `https://app.neuronwriter.com/assets/js/scripts.js` and `assets/js/editor-t.js` (plus inline scripts) on the analysis editor page. All are `POST` with a JSON string body (`$.post(url, JSON.stringify({...}))`) and the session cookie. No CSRF meta tag observed.
+Captured 2026-10-12 from `https://app.neuronwriter.com/assets/js/scripts.js` and `assets/js/editor-t.js` (plus inline scripts). Request shapes were read **read-only** from that JS in the owner's logged-in Chrome; one read call (`get-content-revision`) was made to confirm the response. Nothing was written and no credits were spent.
 
-Request/response shapes are **TODO — fill from `scripts/recon.ts` (TASK-003)**.
+All are `POST` sent like `$.post(url, JSON.stringify({...}))`: body is a JSON string, `Content-Type: application/x-www-form-urlencoded; charset=UTF-8`, `X-Requested-With: XMLHttpRequest`, session cookie. No CSRF token. Responses are `application/json`.
 
-Legend: **R** = read, **W** = write, **$** = consumes analyses or AI credits, **⛔** = never call from the MCP.
+Legend: **R** = read, **W** = write, **$** = spends analyses or AI credits, **⛔** = never call from the MCP. Paths used by the code live only in `src/backends/session/endpoints.ts`.
 
-## Used by the MCP (planned)
+## Used by the MCP
 
-| Endpoint | Kind | Tool | Known body / notes |
-|---|---|---|---|
-| `/backend/get-recent-analyses` | R | `nw_list_queries` | TODO |
-| `/backend/analysis-status` | R | `nw_create_query` (poll) | TODO |
-| `/backend/project-status` | R | `nw_list_queries` | seen on the project page |
-| `/backend/get-project-settings` | R | `nw_list_projects` | TODO |
-| `/backend/check-project-limit` | R | `nw_create_project` | TODO |
-| `/backend/get-content-revision` | R | `nw_get_content` | seen on editor load |
-| `/backend/check-readability` | R | `nw_check_readability` | seen on editor load |
-| `/backend/check-meta-score` | R | `nw_score_content` | TODO |
-| `/backend/highlight-terms` | R | `nw_score_content` | TODO |
-| `/backend/new-analysis` | W $ | `nw_create_query` | 1 of 25/month |
-| `/backend/new-project` | W | `nw_create_project` | Bronze: 2/2 slots used |
-| `/backend/save-optimized-content` | W | `nw_import_content` | `{analysis: contadu_analysis_sig, content: {title, description, content: html, text, content_terms: {term: {importance, uses}}, custom_h1_terms, custom_h2_terms, …}}` |
-| `/backend/auto-import-content` | W | `nw_import_content` (url) | TODO |
-| `/backend/mark-content-as-done` | W | `nw_mark_done` | TODO |
-| `/backend/unmark-content-as-done` | W | `nw_unmark_done` | TODO |
-| `/backend/generate-ai-outline` | W $ | `nw_generate_outline` | AI credits |
-| `/backend/generate-ai-content` | W $ | `nw_generate_content` | AI credits |
-| `/backend/check-readability-ai` | R $? | — | check if it costs credits |
+| Endpoint | Kind | Tool | Request body | Response |
+|---|---|---|---|---|
+| `get-content-revision` | R | `nw_get_content` | `{analysis: contadu_analysis_sig, revision: <sig from optimize_content_revisions[i][0]>}` | `{content: {title, description, content (html), text, content_terms, custom_h1_terms, custom_h2_terms, custom_content_terms, custom_terms_ranges, word_count, competitors_avg_word_count, competitors_avg_readability, target_word_count, target_readability, treat_title_as_h1}}` — **verified live**, Arabic intact |
+| `check-readability` | R | `nw_score_content`, `nw_import_content` | `{wizard_mode, text, title, draft_title:'', draft_description:'', description, content (html), content_terms: get_content_terms_to_check(), custom_h1_terms, custom_h2_terms, custom_content_terms, custom_terms_ranges, analysis, project: PROJECT_SIG, word_count, competitors_avg_word_count, competitors_avg_readability, target_word_count, target_readability, treat_title_as_h1}` | `{word_count, readability, keywords_matched, overall_score, score_parts{meta,headers,terms,balance}, subscore_parts, subscore_details, overall_score_details (html)}` (seen in `last_readability_update_data`) |
+| `save-optimized-content` | W | `nw_import_content` | `{analysis, content: {title, description, content (html), text, content_terms: {term: {importance, uses}} (non-excluded), custom_*_terms, custom_terms_ranges, word_count, competitors_avg_*, target_*, treat_title_as_h1}, mark_as_done: false, plagia_info: null, autosave: 0}` | not seen yet (callback `finish_save_content_changes`) |
+| `mark-content-as-done` / `unmark-content-as-done` | W | `nw_set_done` | `{analysis}` | `{status: 'ok'}` |
+| `new-analysis` | W $ | `nw_create_query` | `{project, is_multiple_analysis: 0, keyword, multiple_keywords: '', custom_competitors: '', additional_keywords: 'one\nper\nline', target_url: '', engine: 'google.com.sa', language: 'Arabic', prefer_lang: '' or 1, update_inventory: 0, assigned_to, deadline, geolocation_mode: 'country'|'city', geolocation}` | `{status: 'ok', update_status?: 'ask', question_data?}` — **no analysis id**; the app redirects to the project page, so we find the new id in the table. Keywords may not contain `: [ ] " ,` |
+| `generate-ai-outline` | W $ | `nw_generate_outline` | `{project, analysis, language: analysis_language, content_terms: get_content_terms_to_check()}` | `{status, mode, content, ai_credits, ai_usage_info, error}` (keys read by `finish_generate_ai_content`) |
+| `generate-ai-content` | W $ | — (later) | `{mode: 'template'|'ai-selection'|'expand'|…, project, analysis, language, text, template_params: {template: <id>, …per template}, temperature, range_index, range_length, prev_gen_id, high_quality, suggested_output_len, content}` | same as outline. 36 templates in `ai_templates_definition` (`blog-outline`, `intro-terms`, `faq-unusedterms`, `one-click-long-form`, …); each builds its own `template_params` |
+| `analysis-status` | R | — | `{analysis}` | collaboration "recently active" info, **not** readiness |
+
+## Data that comes from pages, not endpoints
+
+- **Recommendations** — `/analysis/view/<id>` globals, read through the page's own functions:
+  - `get_must_have_terms(true,'json')` → `[{term: {min, max}}]` (basic terms with ranges), `get_extended_terms(true,'json')`, `get_title_terms('text')`, `get_description_terms('text')`, `get_h1_terms(true,'text')`, `get_h2_terms(true,'text')`
+  - `content_terms[term] = {importance, uses: {text|h1|h2|h3|title|description: [avg, usage_pc, [competitor counts…]]}}`
+  - `all_entities`, `first_h2_ideas` (`[[heading, score]]`), `target_word_count`, `target_readability`
+  - competitors: `urls_by_id[i]`, `meta_titles[i]`, `params_charts_datasets['content-score'][i]`, `['content-length-words'][i]` (rank = i+1)
+  - Questions (PAA etc.) were **not** found in globals — likely rendered HTML in the Ideas tab. TODO.
+  - Not ready yet ⇔ `content_terms` missing or empty.
+- **Queries of a project** — `/project/view/<id>/optimisation`, DataTable `#analyses_table` (client-side, no ajax). Row id `analysis_tr_<id>`; columns `Query, Target URL, Created (tooltip = exact date), Engine (flag), Score, Saved, Words, Content Comp., Volume, Paid Comp., CPC, Person, Deadline, Tags`. Done state not visible in the table. TODO.
+- **Projects** — side navigation links `/project/view/<id>?from=side` on every page. Owner's: `6ec9249b8de0a586` makkahdecorsa.com (holds `ديكورات مكة` = `c1f8fbd2b38960d3`), `21132423440d01e0` ديكورات.
+- **Plan and usage** — profile page text (`Content writer: N used / 25 per month`, `AI credits`, `Projects`, `Monthly limits reset`). URL `/ucp/profile` taken from the planning session; not re-verified.
+- **Engine / language values** — same as the API: `google.com.sa`, `Arabic` (full language name).
+- **Tags** — no tag-update endpoint identified; `nw_update_tags` is deferred.
 
 ## Full inventory (99)
 
