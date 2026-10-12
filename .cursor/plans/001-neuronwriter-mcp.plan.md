@@ -3,13 +3,13 @@ goal: Build NeuronWriter MCP — a real MCP server that drives the owner's Neuro
 version: 1.0
 date_created: 2026-10-12
 last_updated: 2026-10-12
-status: 'Planned'
+status: 'In progress'
 tags: [feature, architecture, mcp, playwright, seo]
 ---
 
 # Implementation Plan: NeuronWriter MCP
 
-![Status: Planned](https://img.shields.io/badge/status-Planned-blue)
+![Status: In progress](https://img.shields.io/badge/status-In%20progress-yellow)
 
 ## Overview
 **Current State:** Empty repo. The owner has a NeuronWriter **Bronze AppSumo lifetime** plan (1 code). The account's *Neuron API access* and *MCP Server* tabs both show "This feature requires at least Gold plan", so the official MCP (`https://app.neuronwriter.com/mcp/http`), the public API (`/neuron-api/0.5/writer`), every open-source MCP we found, and the Composio toolkit are all unusable today. The account has gone unused for ~12 months.
@@ -30,6 +30,21 @@ src/backends/Backend.ts  (interface: listProjects, newQuery, getQuery, …)
    └── ApiBackend      ← Gold+ only         POST https://app.neuronwriter.com/neuron-api/0.5/writer/<x>
                                              header X-API-KEY
 ```
+
+## 0. Status (2026-10-12, v0.2.0)
+
+Direction changed after planning: the two MIT repos were **imported and built on**, not rewritten (softreviewed → `ApiBackend`, antongulin → `skills/`). Tool design follows `docs/research/2026-10-12-mcp-best-practices.md`, which cut the surface to **10 tools** (reads separate from writes, mark/unmark merged into `nw_set_done`, `get_query` + wait merged into `nw_get_recommendations`, `create_project` dropped because the plan's 2/2 projects are used, `update_tags` deferred until its endpoint is known).
+
+Done in code, covered by fixture tests (34 passing), build clean:
+- TASK-001 scaffold (imported base) · TASK-002 `login`/`status` CLI · TASK-003 recon (read-only, from the app's JS in the owner's Chrome; no script, no fixtures/raw needed) · TASK-004 contract/endpoints/limiter · TASK-005 SessionBackend · TASK-006 server + `nw_status` · TASK-007 list projects/queries · TASK-008 recommendations · TASK-009 get content · TASK-010 create query (dedupe + confirm) · TASK-011 import + score · TASK-012 set done · TASK-013 outline only · TASK-014 ApiBackend.
+
+Verified live: `get-content-revision` returns the saved Arabic article intact; `status` on an empty profile reports "run npm run login".
+
+Waiting on the owner:
+1. `npm run login` once → then every read tool can be checked live (no credits).
+2. Approval for one `nw_create_query` (1 of 25) and one `nw_generate_outline` (AI credits): their request bodies come from the app's JS but have not been sent yet.
+
+Open TODOs: questions (PAA) are not in page globals; done state is not in the queries table; tag-update endpoint unknown; `generate-ai-content` templates (36) not wired; `/ucp/profile` URL not re-verified; TASK-015 evals + registration + release.
 
 ## 1. Requirements & Constraints
 - **REQ-001**: Works on the Bronze plan with no API key — session (cookie) based.

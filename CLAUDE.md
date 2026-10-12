@@ -35,10 +35,9 @@ Why it exists: the owner bought NeuronWriter as an AppSumo lifetime deal and has
 | MCP Server (official) | **locked** — Gold+ |
 | Upgrade path | Profile → Subscription → "Upgrade lifetime access to a higher plan" (Gold = 3 AppSumo codes; AppSumo listing currently sold out) |
 
-Existing data (good for read-only testing):
-- Project `makkahdecorsa.com` → id `6ec9249b8de0a586` (1 query)
-- Project `ديكورات` (9 queries)
-- Query `ديكورات مكة` → `/analysis/view/c1f8fbd2b38960d3` (has a saved Arabic article)
+Existing data (good for read-only testing; verified 2026-10-12):
+- Project `makkahdecorsa.com` → id `6ec9249b8de0a586`, holds query `ديكورات مكة` → `/analysis/view/c1f8fbd2b38960d3` (saved Arabic article, 409 words, score 9, target 1034 words)
+- Project `ديكورات` → id `21132423440d01e0`
 
 ## How NeuronWriter's web app works (what we build on)
 
@@ -49,52 +48,55 @@ Existing data (good for read-only testing):
 - Public API (Gold+ only): `POST https://app.neuronwriter.com/neuron-api/0.5/writer/<method>` with header `X-API-KEY` → [`docs/api/api-docs.md`](docs/api/api-docs.md).
 - Official remote MCP (Gold+ only): `https://app.neuronwriter.com/mcp/http`, OAuth sign-in, 12 tools. Our tool names mirror it with an `nw_` prefix.
 
-## Architecture (summary — details in the plan)
+## Architecture
 
 ```
-MCP client ──stdio──► src/server.ts ─► src/tools/*.ts ─► Backend interface
-                                                   ├─ SessionBackend (default): Playwright persistent profile,
-                                                   │    fetch('/backend/<x>') run inside the page → cookies for free
-                                                   └─ ApiBackend (Gold+): neuron-api/0.5 + X-API-KEY
+MCP client ──stdio──► src/index.ts (serve | login | status) ─► src/server.ts ─► src/tools/*.ts ─► Backend (src/backends/Backend.ts)
+                                                                                   ├─ SessionBackend (default, Bronze): Playwright persistent profile
+                                                                                   └─ ApiBackend (Gold+): neuron-api/0.5 + X-API-KEY (imported softreviewed code)
 ```
-- Login: `neuronwriter-mcp login` opens a visible browser; the **owner types the password himself**. Session lives in `~/.neuronwriter-mcp/profile/` (0700). Never ask for, log, or commit passwords or cookies.
-- `NW_BACKEND=session|api|auto` (`auto` = api if `NEURONWRITER_API_KEY` is set, else session), `NW_PROFILE_DIR`, `NEURONWRITER_API_KEY` (only if the plan is ever upgraded).
-- `src/cli.ts` has three subcommands: `serve` (default, stdio MCP), `login`, `status`.
-- **One warm headless browser**: launched lazily on the first tool call, reused, closed after 10 min idle. Data not behind an endpoint (recommendations, competitors) is read from the analysis page's JS globals via `page.evaluate`, not by parsing HTML.
-- **Both backends return the same shapes** — those of API v0.5 `get-query` / `list-queries` (`terms_txt`, `terms`, `ideas`, `metrics`, `competitors`; see `docs/api/api-docs.md`). Tools must not care which backend answered; tools the API lacks (AI, done marks, tags) throw `NotSupportedByBackend` on `ApiBackend`.
-- `src/limiter.ts`: single-flight FIFO, ≥1.5 s gap for writes / 300 ms for reads, max 3 retries with backoff on 429/5xx.
-- Error mapping in `SessionBackend`: login redirect / HTML login page → `SessionExpiredError` ("run: npx neuronwriter-mcp login"); plan-limit messages → `PlanLimitError` carrying NeuronWriter's text verbatim.
-- Tools use `registerTool` with zod schemas, `annotations` (`readOnlyHint`/`destructiveHint`/…) and `structuredContent`. Credit-consuming tools say so in their description; `nw_create_query` dedupes identical keyword+engine+language within 30 min unless `force: true`.
-- Fixtures: raw recordings from `scripts/recon.ts` go to `fixtures/raw/` (git-ignored); only redacted copies (no cookies, emails, signatures) go in `fixtures/`.
+- Base code was imported, not rewritten: softreviewed's API client lives on in `src/backends/api/ApiBackend.ts`, antongulin's skill in `skills/neuronwriter-api/`. Build on them; don't replace them.
+- **10 tools**, `nw_{action}_{resource}`: reads `nw_status`, `nw_list_projects`, `nw_list_queries`, `nw_get_recommendations`, `nw_get_content`, `nw_score_content`; writes `nw_import_content`, `nw_set_done`; credit-spending `nw_create_query`, `nw_generate_outline`. Rules every tool follows (from [`docs/research/2026-10-12-mcp-best-practices.md`](docs/research/2026-10-12-mcp-best-practices.md)): `registerTool` only, `z.strictObject` input, `outputSchema` + `structuredContent` + text copy (`ok()` in `tools/shared.ts`), all four annotations set, 3–4+ sentence description, failures as `isError` with a "Next step" (`handle()` + `NwError.hint`), reads never share a tool with writes, large lists paged or capped.
+- Credit-spending tools refuse without `confirm: true` (`ConfirmationRequiredError`); `nw_create_query` first returns an existing analysis with the same keyword unless `force: true`.
+- **Both backends return the same shapes** (`Recommendations`, `QuerySummary`, `Score`… in `Backend.ts`). API-only gaps throw `NotSupportedError`.
+- **SessionBackend** (`src/backends/session/`):
+  - `browser.ts` — one headless persistent context on `NW_PROFILE_DIR` (default `~/.neuronwriter-mcp/profile`, 0700), lazy, closed after 10 min idle. It aborts images/fonts/CSS and **every `/backend/` request without our `x-nw-mcp` header**, so the editor page can never autosave or poll on its own.
+  - `pageScripts.ts` — functions run inside the page with `page.evaluate`; must stay self-contained. Recommendations come from the page's own functions (`get_must_have_terms(true,'json')` …), not reimplemented.
+  - `normalize.ts` — pure mapping + `interpretResponse` (HTML/login redirect → `SessionExpiredError`, 429/5xx → `RetryableError`, `{error}` → `PlanLimitError`/`NeuronWriterError`). Tested with `test/fixtures/`.
+  - Request shapes and what is still unknown: [`docs/backend-endpoints.md`](docs/backend-endpoints.md).
+- `src/limiter.ts`: single FIFO queue, 300 ms before reads / 1.5 s before writes, backoff with jitter on 429/5xx. **Writes are never retried** (a retried `new-analysis` would spend twice).
+- Login: `npm run login` opens a visible browser; the **owner types the password himself**. Never ask for, log, or commit passwords or cookies.
+- `NW_BACKEND=session|api|auto` (`auto` = api if `NEURONWRITER_API_KEY`/`NW_API_KEY` is set, else session).
 
-## Commands (once TASK-001 lands)
+## Commands
 
-Node ≥ 22, TypeScript, ESM. No source exists yet — TASK-001 creates the scaffold.
+Node ≥ 22, TypeScript (NodeNext ESM).
 
 - `npm run build` — tsc → `build/`
-- `npm run dev` — run via tsx without building (e.g. `npx tsx src/cli.ts status`)
-- `npm test` — vitest (fixture-based; never spends credits)
-- Single test: `npx vitest run src/limiter.test.ts` or `npx vitest run -t "<test name>"`
-- `npm run login` — one-time headed login
-- `npm run status` — session + plan + limits
-- `npx @modelcontextprotocol/inspector node build/cli.js` — try tools by hand
-- Register: `claude mcp add --scope user neuronwriter -- node /Users/aboarejal/Desktop/Project/neuronwriter-mcp/build/cli.js`
+- `npm test` — vitest, fixtures only (never touches the account)
+- Single test: `npx vitest run test/limiter.test.ts` or `npx vitest run -t "<test name>"`
+- `npm run typecheck`
+- `npm run login` — one-time headed sign-in (owner only)
+- `npm run status` — session, plan, usage, reset date
+- `npx tsx src/index.ts status` — same without building
+- `npm run inspector` — MCP Inspector on `build/index.js`
+- Register: `claude mcp add --scope user neuronwriter -- node /Users/aboarejal/Desktop/Project/neuronwriter-mcp/build/index.js`
 
 ## Hard rules
 
 1. **Credits are scarce** (25 analyses/month). Tests use fixtures. Any live call to `new-analysis` / `generate-ai-*` needs the owner's OK in chat.
-2. **Never call** `delete-project`, sharing/access (`add-analysis-access`, `revoke-analysis-access`, `update-share-analysis-link`), billing, survey, notifications, or `login` with stored credentials unless the owner set up Keychain auto-login.
-3. **Human pacing:** one request at a time, ≥1.5 s between writes, backoff on 429/5xx. No bulk jobs. Never auto-solve captchas.
+2. **Never call** anything in `FORBIDDEN_ENDPOINTS` (`endpoints.ts`): `delete-project`, sharing/access, billing, survey, notifications, `login`.
+3. **Human pacing:** one request at a time through `Limiter`, no bulk jobs, never auto-solve captchas.
 4. All `/backend/*` paths live in `src/backends/session/endpoints.ts` only.
-5. Verify the current `@modelcontextprotocol/sdk` README before writing server code (v1.32.1 on 2026-10-12). Don't copy SDK 0.5 code from the reference repos.
-6. stdout is the MCP protocol — log to stderr only.
-7. Arabic content must round-trip byte-identical; test with the owner's Arabic project.
-8. Keep MIT notices in `THIRD_PARTY_NOTICES.md` (we borrow API shapes/tool ideas from two MIT repos — see README).
-9. Prefer Node built-ins (`fetch`, `parseArgs`, `--env-file`) over packages. Deps allowed: `@modelcontextprotocol/sdk`, `zod`, `playwright` (dev: `typescript`, `vitest`, `@types/node`, `tsx`). `node-html-parser` only if `page.evaluate` can't reach a value. No axios, no dotenv.
+5. Follow the checklist in `docs/research/2026-10-12-mcp-best-practices.md` for every new tool; `server.tool()` and the low-level `Server` API are deprecated.
+6. stdout is the MCP protocol — log to stderr only (`src/log.ts`).
+7. Arabic content must round-trip byte-identical (the owner's own content is never sanitized; only third-party text goes through `sanitizeExternalText`).
+8. Keep MIT notices in `THIRD_PARTY_NOTICES.md`.
+9. Runtime deps: `@modelcontextprotocol/sdk`, `zod`, `playwright`, `axios` (kept from the imported API client). Prefer Node built-ins for anything new.
 10. This file contains personal account data — **strip it before making the repo public**.
 
 ## Workflow
 
 - Work on `main`, granular commits `type(scope): why`, one subject each.
 - Keep a `CHANGELOG.md` (Keep a Changelog) and cut SemVer versions after finished batches, like the owner's main project.
-- Reference clones (read-only): `~/.repos/softreviewed_neuronwriter-mcp-server` @ `9fe5f8a`, `~/.repos/antongulin_neuronwriter-api-skill` @ `c9ab509`.
+- Upstream sources (already imported, read-only): `~/.repos/softreviewed_neuronwriter-mcp-server` @ `9fe5f8a`, `~/.repos/antongulin_neuronwriter-api-skill` @ `c9ab509`.
