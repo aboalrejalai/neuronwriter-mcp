@@ -4,6 +4,13 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Fixed
+- Heading ideas were empty: the analysis page only fills them after its own load-time reads, which were blocked. Those reads (`get-content-revision`, `check-readability`, `get-project-asset`) are now allowed; every page-initiated write stays blocked.
+- Word count glued adjacent paragraphs together (394 instead of 409); block elements now break words.
+
+### Added
+- `scripts/smoke-live.mjs`: read-only live check of every tool that spends nothing, over real stdio.
+
 ## [0.2.0] - 2026-10-12
 
 ### Added

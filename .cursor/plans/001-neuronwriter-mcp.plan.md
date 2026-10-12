@@ -38,13 +38,11 @@ Direction changed after planning: the two MIT repos were **imported and built on
 Done in code, covered by fixture tests (34 passing), build clean:
 - TASK-001 scaffold (imported base) · TASK-002 `login`/`status` CLI · TASK-003 recon (read-only, from the app's JS in the owner's Chrome; no script, no fixtures/raw needed) · TASK-004 contract/endpoints/limiter · TASK-005 SessionBackend · TASK-006 server + `nw_status` · TASK-007 list projects/queries · TASK-008 recommendations · TASK-009 get content · TASK-010 create query (dedupe + confirm) · TASK-011 import + score · TASK-012 set done · TASK-013 outline only · TASK-014 ApiBackend.
 
-Verified live: `get-content-revision` returns the saved Arabic article intact; `status` on an empty profile reports "run npm run login".
+Verified live on 2026-10-13 after the owner's `npm run login` (`node scripts/smoke-live.mjs`, read-only, over real stdio): `nw_status` (Bronze, 0/25, resets 2026-11-12, so `/ucp/profile` is right), `nw_list_projects` (both projects), `nw_list_queries`, `nw_get_recommendations` (28 basic terms with ranges, 18 heading ideas, 27 competitors), `nw_get_content` (Arabic article intact), `nw_score_content` (score 9 = editor's 9; 408 vs 409 words; readability 42).
 
-Waiting on the owner:
-1. `npm run login` once → then every read tool can be checked live (no credits).
-2. Approval for one `nw_create_query` (1 of 25) and one `nw_generate_outline` (AI credits): their request bodies come from the app's JS but have not been sent yet.
+Waiting on the owner: approval to try the writes live — `nw_import_content` + `nw_set_done` (no credits, but they change the saved article/flag), one `nw_create_query` (1 of 25) and one `nw_generate_outline` (AI credits).
 
-Open TODOs: questions (PAA) are not in page globals; done state is not in the queries table; tag-update endpoint unknown; `generate-ai-content` templates (36) not wired; `/ucp/profile` URL not re-verified; TASK-015 evals + registration + release.
+Open TODOs: questions (PAA) are not in page globals; done state is not in the queries table; tag-update endpoint unknown; `generate-ai-content` templates (36) not wired; TASK-015 evals + registration + release.
 
 ## 1. Requirements & Constraints
 - **REQ-001**: Works on the Bronze plan with no API key — session (cookie) based.
