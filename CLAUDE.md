@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Canonical agent instructions for this repo. `AGENTS.md` is a symlink to this file — edit here only.
 
-**Active plan:** [`.claude/plans/001-neuronwriter-mcp.plan.md`](.claude/plans/001-neuronwriter-mcp.plan.md) (real file in `.cursor/plans/`, symlinked into `.claude/plans/` and `.agents/plans/`).
+**Active plan:** [`.claude/plans/002-complete-plan-coverage.plan.md`](.claude/plans/002-complete-plan-coverage.plan.md) — cover every 🟡 row of `docs/capability-map.md`. Previous: `001-neuronwriter-mcp.plan.md` (v0.1–v0.3, done except evals, which moved into 002). Real files live in `.cursor/plans/`, symlinked into `.claude/plans/` and `.agents/plans/`.
 When the owner says **"اشتغل"** / "start": open the plan, find the first unchecked `TASK-xxx`, implement it, verify it per its *Verification* block, tick it in the plan, commit, continue. Stop at every **Checkpoint** and report to the owner before the next phase.
 
 ## What this project is

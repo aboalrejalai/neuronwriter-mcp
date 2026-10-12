@@ -1,0 +1,1 @@
+../../.cursor/plans/002-complete-plan-coverage.plan.md
