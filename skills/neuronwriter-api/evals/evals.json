@@ -1,0 +1,29 @@
+{
+  "skill_name": "neuronwriter-api",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "I need to write SEO-optimized content about 'emergency HVAC repair' for my client a-classhvac.com. First, explore what's in my NeuronWriter account, then create a query, get the SEO recommendations, and use them to write a content brief. Show me everything you find.",
+      "expected_output": "Content brief with SEO terms, questions, word count target, and SERP analysis based on real NeuronWriter API data",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "I'm working on a blog post for elitehousecleaning.org about 'how to clean grout'. Use the NeuronWriter API to research this keyword, get the NLP term recommendations, and tell me what questions I should answer in the article plus what my word count target should be.",
+      "expected_output": "Keyword analysis report with term suggestions, question ideas, and word count target",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "I need to check if any queries already exist for the cglazing.com project in NeuronWriter. List them, then create a new query for 'glass balustrade installation' with top-intent mode and monitor it until ready. Show me the SERP summary and competitor data.",
+      "expected_output": "Existing queries list, new query creation confirmation, and final SERP analysis with competitors",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "Use the NeuronWriter API to research 'commercial glazing' for cglazing.com. Get the SEO recommendations including term ranges and competitor data. Then GENERATE a full HTML article from the API data using the exact term frequency ranges from content_basic_w_ranges. Show me the generated content. Then actually import it to NeuronWriter using import-content and tell me the content score.",
+      "expected_output": "Generated HTML content using real term ranges from API, import-content call with score result",
+      "files": []
+    }
+  ]
+}
