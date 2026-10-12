@@ -2,7 +2,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { analysisUrl, type Backend, type QuerySummary, type Recommendations } from '../backends/Backend.js';
-import { ConfirmationRequiredError } from '../errors.js';
+import { ConfirmationRequiredError, NwError } from '../errors.js';
 import { READ_ONLY, UNTRUSTED_NOTE, confirm, handle, ok, projectId, queryId, reportProgress } from './shared.js';
 
 const POLL_INTERVAL_MS = 15_000;
@@ -30,12 +30,13 @@ export function registerQueryTools(server: McpServer, backend: Backend): void {
       description:
         'Lists the Content Writer analyses ("queries") of one project: keyword, id, content score, word count, tags and creation date. ' +
         'Use it to find an existing analysis before creating a new one, since creating one spends a monthly analysis. ' +
-        'Filter with keyword (case-insensitive substring) or tag; results are paged with limit/offset and the response says if more exist. ' +
+        'By default analyses tagged Done or Deleted are left out (status: "all" shows everything). Filter with keyword (case-insensitive substring) or tag; results are paged with limit/offset. ' +
         'Spends nothing.',
       inputSchema: z.strictObject({
         project: projectId,
         keyword: z.string().max(200).optional().describe('Only analyses whose keyword contains this text.'),
         tag: z.string().max(100).optional().describe('Only analyses with this tag.'),
+        status: z.enum(['active', 'done', 'deleted', 'all']).default('active').describe('active = not tagged Done or Deleted (the app\'s "In progress" view).'),
         limit: z.number().int().min(1).max(100).default(25),
         offset: z.number().int().min(0).default(0),
       }),
@@ -53,6 +54,10 @@ export function registerQueryTools(server: McpServer, backend: Backend): void {
       let queries: QuerySummary[] = await backend.listQueries(args.project, extra.signal);
       if (args.keyword) queries = queries.filter((q) => normalizeKeyword(q.keyword).includes(normalizeKeyword(args.keyword!)));
       if (args.tag) queries = queries.filter((q) => q.tags.some((t) => t.toLowerCase() === args.tag!.toLowerCase()));
+      const has = (q: QuerySummary, tag: string) => q.tags.includes(tag);
+      if (args.status === 'active') queries = queries.filter((q) => !has(q, 'Done') && !has(q, 'Deleted'));
+      if (args.status === 'done') queries = queries.filter((q) => has(q, 'Done'));
+      if (args.status === 'deleted') queries = queries.filter((q) => has(q, 'Deleted'));
       const page = queries.slice(args.offset, args.offset + args.limit);
       const hasMore = args.offset + page.length < queries.length;
       return ok(`${page.length} of ${queries.length} analyses.${hasMore ? ` More with offset ${args.offset + page.length}.` : ''}`, {
@@ -71,7 +76,7 @@ export function registerQueryTools(server: McpServer, backend: Backend): void {
     {
       title: 'Get SEO recommendations for an analysis',
       description:
-        'Returns what an article must contain to rank for the analysis keyword: content terms with min-max usage counts, title/H1/H2/description terms, entities, heading ideas, target word count and readability, and the top competitors with their scores. ' +
+        'Returns what an article must contain to rank for the analysis keyword: content terms with min-max usage counts, title/H1/H2/description terms, entities, heading ideas, questions to answer, target word count and readability, and the top competitors with their scores, word counts and H1-H3 outlines. ' +
         'Use it before writing or rewriting content; write so every content_basic term falls inside its range. ' +
         'A freshly created analysis takes about a minute: pass wait_seconds to keep checking until it is ready. Spends nothing. ' +
         UNTRUSTED_NOTE,
@@ -80,6 +85,7 @@ export function registerQueryTools(server: McpServer, backend: Backend): void {
         wait_seconds: z.number().int().min(0).max(300).default(0).describe('Keep checking up to this many seconds while the analysis is still being prepared.'),
         max_extended_terms: z.number().int().min(0).max(200).default(60).describe('Cap on content_extended terms returned.'),
         max_competitors: z.number().int().min(0).max(30).default(10),
+        max_headings_per_competitor: z.number().int().min(0).max(100).default(25).describe('Cap on each competitor\'s H1-H3 outline; 0 leaves outlines out.'),
       }),
       outputSchema: z.object({
         query_id: z.string(),
@@ -98,7 +104,14 @@ export function registerQueryTools(server: McpServer, backend: Backend): void {
           entities: z.array(z.string()),
         }),
         ideas: z.object({ headings: z.array(z.string()), questions: z.array(z.string()) }),
-        competitors: z.array(z.object({ rank: z.number(), url: z.string(), title: z.string().nullable(), content_score: z.number().nullable(), word_count: z.number().nullable() })),
+        competitors: z.array(z.object({
+          rank: z.number(),
+          url: z.string(),
+          title: z.string().nullable(),
+          content_score: z.number().nullable(),
+          word_count: z.number().nullable(),
+          headings: z.array(z.object({ level: z.number(), text: z.string() })).describe('The competitor page\'s H1-H3 outline.'),
+        })),
         competitors_total: z.number(),
       }),
       annotations: READ_ONLY,
@@ -117,7 +130,7 @@ export function registerQueryTools(server: McpServer, backend: Backend): void {
         ...recommendations,
         url: analysisUrl(args.query),
         terms: { ...terms, content_extended: terms.content_extended.slice(0, args.max_extended_terms), content_extended_total: terms.content_extended.length },
-        competitors: competitors.slice(0, args.max_competitors),
+        competitors: competitors.slice(0, args.max_competitors).map((c) => ({ ...c, headings: c.headings.slice(0, args.max_headings_per_competitor) })),
         competitors_total: competitors.length,
       };
       const summary = recommendations.status === 'ready'
@@ -177,6 +190,63 @@ export function registerQueryTools(server: McpServer, backend: Backend): void {
         ? `Created analysis ${query_id} for "${args.keyword}". Next: nw_get_recommendations with wait_seconds: 120.`
         : `NeuronWriter accepted the analysis for "${args.keyword}" but it is not listed yet. Find it with nw_list_queries in a minute; do not create it again.`;
       return ok(summary, { query_id, keyword: args.keyword, url: query_id ? analysisUrl(query_id) : null, existing: false, spent_analysis: true });
+    }),
+  );
+}
+
+export function registerQueryManagementTools(server: McpServer, backend: Backend): void {
+  server.registerTool(
+    'nw_update_tags',
+    {
+      title: 'Add or remove tags of an analysis',
+      description:
+        'Adds and/or removes tags on an analysis in the project list, e.g. Optimize, Improve, Distribute or your own. "Done" and "Deleted" are tags too: removing "Deleted" restores a deleted analysis. ' +
+        'The current tags are read first and only the ones you name change. ' +
+        'Use nw_set_done for the editor\'s "Mark as done" button instead of the Done tag when the article is finished. Spends nothing; session backend only.',
+      inputSchema: z.strictObject({
+        project: projectId,
+        query: queryId,
+        add: z.array(z.string().min(1).max(60).refine((t) => !t.includes(','), 'Tags cannot contain commas.')).max(20).default([]),
+        remove: z.array(z.string().min(1).max(60)).max(20).default([]),
+      }),
+      outputSchema: z.object({ query_id: z.string(), tags: z.array(z.string()) }),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+    },
+    handle(async (args, extra) => {
+      const current = (await backend.listQueries(args.project, extra.signal)).find((q) => q.id === args.query);
+      if (!current) throw new NwError(`Analysis ${args.query} is not in project ${args.project}.`, 'Check the ids with nw_list_queries (status: "all").');
+      const remove = new Set(args.remove.map((t) => t.toLowerCase()));
+      const tags = [...new Set([...current.tags.filter((t) => !remove.has(t.toLowerCase())), ...args.add])];
+      await backend.setTags(args.project, args.query, tags, extra.signal);
+      const after = (await backend.listQueries(args.project, extra.signal)).find((q) => q.id === args.query);
+      return ok(`Tags: ${after?.tags.join(', ') || '(none)'}.`, { query_id: args.query, tags: after?.tags ?? tags });
+    }),
+  );
+
+  server.registerTool(
+    'nw_select_competitors',
+    {
+      title: 'Choose which competitors an analysis uses',
+      description:
+        'Changes the competitor set NeuronWriter computes the recommendations from: the top 10, the top 30, or a custom list of competitor URLs to keep (at least 3, 5+ advised). ' +
+        'Use it to drop irrelevant results (directories, social media, marketplaces) so the term ranges reflect real competitors. ' +
+        'Recommendations are recalculated afterwards; read them again with nw_get_recommendations. Spends nothing; session backend only.',
+      inputSchema: z.strictObject({
+        query: queryId,
+        mode: z.enum(['top10', 'top30', 'custom']),
+        keep_urls: z.array(z.string().url()).max(30).optional().describe('For mode "custom": competitor URLs exactly as nw_get_recommendations lists them.'),
+      }),
+      outputSchema: z.object({ query_id: z.string(), selected: z.array(z.string()) }),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+    },
+    handle(async (args, extra) => {
+      if (args.mode === 'custom' && !args.keep_urls?.length) throw new NwError('mode "custom" needs keep_urls.', 'Pass the competitor URLs to keep.');
+      const selected = await backend.selectCompetitors(
+        args.query,
+        args.mode === 'custom' ? { mode: 'custom', keep_urls: args.keep_urls! } : { mode: args.mode },
+        extra.signal,
+      );
+      return ok(`${selected.length} competitors selected. Read nw_get_recommendations again for the new ranges.`, { query_id: args.query, selected });
     }),
   );
 }

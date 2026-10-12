@@ -2,7 +2,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { AccountStatus, Backend, ContentInput, ContentRevision, CreateQueryInput, Outline, Project, QuerySummary, Recommendations, Score } from '../src/backends/Backend.js';
+import type { AccountStatus, AiRequest, AiResult, Backend, CompetitorSelection, ContentInput, ContentPlanIdea, ContentRevision, CreateQueryInput, PageContent, Project, ProjectSettings, ProjectSettingsPatch, QuerySummary, Recommendations, Score } from '../src/backends/Backend.js';
 import { PlanLimitError, SessionExpiredError } from '../src/errors.js';
 import { createServer } from '../src/server.js';
 
@@ -39,7 +39,7 @@ class FakeBackend implements Backend {
       query_id: queryId, keyword: 'ديكورات مكة', status: 'ready', targets: { word_count: 1034, readability: 20 },
       terms: { content_basic: [{ term: 'مكة', min: 10, max: 32 }], content_extended: Array.from({ length: 80 }, (_, i) => ({ term: `t${i}`, min: 1, max: 1 })), title: [], description: [], h1: [], h2: [], entities: [] },
       ideas: { headings: [], questions: [] },
-      competitors: Array.from({ length: 27 }, (_, i) => ({ rank: i + 1, url: `https://c${i}.example/`, title: null, content_score: 50, word_count: 900 })),
+      competitors: Array.from({ length: 27 }, (_, i) => ({ rank: i + 1, url: `https://c${i}.example/`, title: null, content_score: 50, word_count: 900, headings: Array.from({ length: 40 }, (_, j) => ({ level: 2, text: `h${j}` })) })),
     };
   }
   async getContent(queryId: string): Promise<ContentRevision> {
@@ -61,9 +61,46 @@ class FakeBackend implements Backend {
     this.track(`createQuery:${input.keyword}`);
     return { query_id: 'abcdefabcdefabcd' };
   }
-  async generateOutline(): Promise<Outline> {
-    this.track('generateOutline');
-    return { content: '<h2>…</h2>', ai_credits: 120 };
+  async generateAi(_q: string, request: AiRequest): Promise<AiResult> {
+    this.track(`generateAi:${request.kind}`);
+    return { content: '<h2>…</h2>', title: request.kind === 'meta' ? 'عنوان' : null, usage: '120 AI credits used' };
+  }
+  async setTags(_p: string, queryId: string, tags: string[]): Promise<void> {
+    this.track(`setTags:${tags.join('|')}`);
+    const q = this.queries.find((x) => x.id === queryId);
+    if (q) q.tags = tags;
+  }
+  async selectCompetitors(_q: string, selection: CompetitorSelection): Promise<string[]> {
+    this.track(`selectCompetitors:${selection.mode}`);
+    return selection.mode === 'custom' ? selection.keep_urls : ['https://a.example/'];
+  }
+  async fetchPage(_q: string, url: string): Promise<PageContent> {
+    this.track('fetchPage');
+    return { url, title: 'T', description: 'D', html: ARABIC_HTML };
+  }
+  ideas: ContentPlanIdea[] = [];
+  async listContentPlan(): Promise<ContentPlanIdea[]> {
+    this.track('listContentPlan');
+    return this.ideas;
+  }
+  async addContentPlanIdea(_p: string, keyword: string, additional: string[]): Promise<void> {
+    this.track(`addContentPlanIdea:${keyword}`);
+    this.ideas.push({ id: 'x', keyword, additional_keywords: additional, added: null, assigned_to: null, expected: null });
+  }
+  settings: ProjectSettings = {
+    project_id: '6ec9249b8de0a586', mode: 'domain', name: 'makkahdecorsa.com', homepage: 'https://makkahdecorsa.com', engine: 'google.com.sa', language: 'Arabic',
+    treat_title_as_h1: false, disable_long_terms: false, keywords: { desired: [], brand: [], negative: [], competitors: [] }, domains: { competitors: [], excluded: [] },
+    ai_profile: { overview: '', products_pricing: '', labeling_entities: '', personas: '', brand_voice: '' }, report_contact_info: '',
+    wordpress: { user: '', password_set: false, subdirectory: false, subdirectory_url: '' },
+  };
+  async getProjectSettings(): Promise<ProjectSettings> {
+    this.track('getProjectSettings');
+    return this.settings;
+  }
+  async updateProjectSettings(_p: string, patch: ProjectSettingsPatch): Promise<ProjectSettings> {
+    this.track(`updateProjectSettings:${Object.keys(patch).join(',')}`);
+    this.settings = { ...this.settings, ...patch, ai_profile: { ...this.settings.ai_profile, ...patch.ai_profile } } as ProjectSettings;
+    return this.settings;
   }
   async close(): Promise<void> {}
 }
@@ -87,11 +124,12 @@ const call = (name: string, args: Record<string, unknown> = {}) => client.callTo
 const text = (result: CallToolResult) => (result.content[0] as { text: string }).text;
 
 describe('tool surface', () => {
-  it('exposes 10 nw_ tools, each with title, long description, output schema and all four annotations', async () => {
+  it('exposes 17 nw_ tools, each with title, long description, output schema and all four annotations', async () => {
     const { tools } = await client.listTools();
     expect(tools.map((t) => t.name).sort()).toEqual([
-      'nw_create_query', 'nw_generate_outline', 'nw_get_content', 'nw_get_recommendations', 'nw_import_content',
-      'nw_list_projects', 'nw_list_queries', 'nw_score_content', 'nw_set_done', 'nw_status',
+      'nw_add_content_plan_idea', 'nw_create_query', 'nw_fetch_page', 'nw_generate_ai', 'nw_get_content', 'nw_get_project_settings',
+      'nw_get_recommendations', 'nw_import_content', 'nw_list_content_plan', 'nw_list_projects', 'nw_list_queries', 'nw_score_content',
+      'nw_select_competitors', 'nw_set_done', 'nw_status', 'nw_update_project_settings', 'nw_update_tags',
     ]);
     for (const tool of tools) {
       expect(tool.name).toMatch(/^nw_[a-z_]+$/);
@@ -107,7 +145,9 @@ describe('tool surface', () => {
   it('keeps reads and credit-spending tools apart', async () => {
     const { tools } = await client.listTools();
     const readOnly = tools.filter((t) => t.annotations?.readOnlyHint).map((t) => t.name);
-    expect(readOnly.sort()).toEqual(['nw_get_content', 'nw_get_recommendations', 'nw_list_projects', 'nw_list_queries', 'nw_score_content', 'nw_status']);
+    expect(readOnly.sort()).toEqual([
+      'nw_fetch_page', 'nw_get_content', 'nw_get_project_settings', 'nw_get_recommendations', 'nw_list_content_plan', 'nw_list_projects', 'nw_list_queries', 'nw_score_content', 'nw_status',
+    ]);
   });
 });
 
@@ -135,6 +175,7 @@ describe('results', () => {
     expect(data.terms.content_extended_total).toBe(80);
     expect(data.competitors).toHaveLength(10);
     expect(data.competitors_total).toBe(27);
+    expect((data.competitors[0] as { headings: unknown[] }).headings).toHaveLength(25);
   });
 
   it('round-trips Arabic content byte-identical', async () => {
@@ -142,6 +183,46 @@ describe('results', () => {
     expect((got.structuredContent as { html: string }).html).toBe(ARABIC_HTML);
     await call('nw_import_content', { query: 'c1f8fbd2b38960d3', html: ARABIC_HTML, title: 'ديكورات مكة' });
     expect(backend.calls).toContain(`importContent:${ARABIC_HTML}`);
+  });
+});
+
+describe('management tools', () => {
+  it('hides Done and Deleted analyses by default', async () => {
+    backend.queries[1].tags = ['Done'];
+    backend.queries[2].tags = ['Optimize', 'Deleted'];
+    const active = await call('nw_list_queries', { project: '6ec9249b8de0a586', limit: 100 });
+    expect((active.structuredContent as { total: number }).total).toBe(29);
+    const deleted = await call('nw_list_queries', { project: '6ec9249b8de0a586', status: 'deleted' });
+    expect((deleted.structuredContent as { total: number }).total).toBe(1);
+  });
+
+  it('adds and removes tags without touching the others', async () => {
+    backend.queries[0].tags = ['Optimize', 'Deleted'];
+    const result = await call('nw_update_tags', { project: '6ec9249b8de0a586', query: 'c1f8fbd2b38960d3', add: ['Improve'], remove: ['deleted'] });
+    expect(result.structuredContent).toMatchObject({ tags: ['Optimize', 'Improve'] });
+  });
+
+  it('needs keep_urls for a custom competitor set', async () => {
+    expect((await call('nw_select_competitors', { query: 'c1f8fbd2b38960d3', mode: 'custom' })).isError).toBe(true);
+    const ok = await call('nw_select_competitors', { query: 'c1f8fbd2b38960d3', mode: 'top30' });
+    expect(ok.structuredContent).toMatchObject({ selected: ['https://a.example/'] });
+  });
+
+  it('fetches and scores a page', async () => {
+    const result = await call('nw_fetch_page', { query: 'c1f8fbd2b38960d3', url: 'https://makkahdecorsa.com/' });
+    expect(result.structuredContent).toMatchObject({ html: ARABIC_HTML, score: { content_score: 61 } });
+  });
+
+  it('updates only the settings passed', async () => {
+    const result = await call('nw_update_project_settings', { project: '6ec9249b8de0a586', ai_profile: { brand_voice: 'ودود' } });
+    expect(backend.calls).toContain('updateProjectSettings:ai_profile');
+    expect(result.structuredContent).toMatchObject({ name: 'makkahdecorsa.com', ai_profile: { brand_voice: 'ودود', overview: '' } });
+    expect((await call('nw_update_project_settings', { project: '6ec9249b8de0a586' })).isError).toBe(true);
+  });
+
+  it('adds content plan ideas', async () => {
+    const result = await call('nw_add_content_plan_idea', { project: '6ec9249b8de0a586', keyword: 'بديل الرخام مكة', additional_keywords: ['بديل الرخام'] });
+    expect(result.structuredContent).toMatchObject({ ideas: [{ keyword: 'بديل الرخام مكة', additional_keywords: ['بديل الرخام'] }] });
   });
 });
 
@@ -197,10 +278,16 @@ describe('errors and safety', () => {
   });
 
   it('refuses AI generation without confirm', async () => {
-    const result = await call('nw_generate_outline', { query: 'c1f8fbd2b38960d3' });
+    const result = await call('nw_generate_ai', { query: 'c1f8fbd2b38960d3', kind: 'outline' });
     expect(result.isError).toBe(true);
     expect(backend.calls).toEqual([]);
-    const confirmed = await call('nw_generate_outline', { query: 'c1f8fbd2b38960d3', confirm: true });
-    expect(confirmed.structuredContent).toMatchObject({ ai_credits: 120 });
+    const confirmed = await call('nw_generate_ai', { query: 'c1f8fbd2b38960d3', kind: 'meta', confirm: true });
+    expect(confirmed.structuredContent).toMatchObject({ kind: 'meta', title: 'عنوان', usage: '120 AI credits used' });
+  });
+
+  it('requires text for rephrase before spending anything', async () => {
+    const result = await call('nw_generate_ai', { query: 'c1f8fbd2b38960d3', kind: 'rephrase', confirm: true });
+    expect(result.isError).toBe(true);
+    expect(backend.calls).toEqual([]);
   });
 });
