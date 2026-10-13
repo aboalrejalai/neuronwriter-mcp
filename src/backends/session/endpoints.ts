@@ -25,6 +25,9 @@ export const ENDPOINTS = {
   selectCompetitors: { path: '/backend/analysis-select-competitors', kind: 'write', spendsCredits: false },
   addToContentPlan: { path: '/backend/manual-add-to-content-plan', kind: 'write', spendsCredits: false },
   getProjectSettings: { path: '/backend/get-project-settings', kind: 'read', spendsCredits: false },
+  checkProjectLimit: { path: '/backend/check-project-limit', kind: 'read', spendsCredits: false },
+  newProjectDomain: { path: '/backend/new-project-domain', kind: 'read', spendsCredits: false },
+  newProject: { path: '/backend/new-project', kind: 'write', spendsCredits: false },
   updateProjectSettings: { path: '/backend/update-project-settings', kind: 'write', spendsCredits: false },
 } as const satisfies Record<string, Endpoint>;
 

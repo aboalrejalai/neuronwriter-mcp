@@ -1,8 +1,8 @@
-import { NeuronWriterError } from '../../../errors.js';
+import { NeuronWriterError, PlanLimitError } from '../../../errors.js';
 import type { ProjectSettings, ProjectSettingsPatch } from '../../Backend.js';
-import type { ProjectFeatures } from '../../features.js';
+import type { NewProjectInput, ProjectFeatures } from '../../features.js';
 import { PAGES } from '../endpoints.js';
-import { applySettingsPatch, toProjectSettings } from '../normalize.js';
+import { applySettingsPatch, htmlToText, toProjectSettings } from '../normalize.js';
 import type { SessionCore } from '../SessionCore.js';
 import { readProjectSettingsForm } from '../pageScripts/project.js';
 
@@ -18,6 +18,32 @@ export class SessionProjects implements ProjectFeatures {
     const { page, form, keywords } = await this.readSettings(projectId, signal);
     await this.core.post(page, 'updateProjectSettings', { project: projectId, ...applySettingsPatch(form, keywords, patch) }, signal);
     return this.getSettings(projectId, signal);
+  }
+
+  /** The app's New project wizard: limit check → domain check (suggests engine/language) → create. */
+  async create(input: NewProjectInput, signal?: AbortSignal) {
+    const page = await this.core.open(PAGES.home, signal);
+    const limit = await this.core.post(page, 'checkProjectLimit', {}, signal);
+    if (limit.status !== 'ok') throw new PlanLimitError(htmlToText(limit.error) ?? 'No free project slot on this plan.');
+    const probe = await this.core.post(page, 'newProjectDomain', { mode: input.mode, domain: input.domain_or_name }, signal);
+    if (probe.status === 'error') throw new NeuronWriterError(htmlToText(probe.error) ?? 'NeuronWriter rejected the domain.', 'Check the domain (e.g. example.com) or use mode "nondomain".');
+    const homepage = input.mode === 'domain' ? String(probe.final_url || input.domain_or_name) : input.domain_or_name;
+    const engine = input.engine ?? String(probe.suggested_engine || 'google.com');
+    const language = input.language ?? String(probe.suggested_lang || 'English');
+    const created = await this.core.post(page, 'newProject', {
+      mode: input.mode,
+      homepage,
+      engine,
+      language,
+      project_keywords: (input.keywords ?? []).join('\n'),
+      wizard_ver: 'free',
+    }, signal);
+    // This endpoint answers with an array: ['success', <project id>] or ['error', <message>].
+    const result = Object.values(created);
+    if (result[0] !== 'success' || typeof result[1] !== 'string') {
+      throw new NeuronWriterError(htmlToText(result[1]) ?? 'NeuronWriter did not create the project.', 'Read the message; check nw_status for free project slots.');
+    }
+    return { project_id: result[1], homepage, engine, language };
   }
 
   /** The settings form (DOM) plus the four keyword lists (endpoint), i.e. everything the Save button sends. */

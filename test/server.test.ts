@@ -33,6 +33,10 @@ class FakeBackend implements Backend {
     projects: {
       getSettings: () => this.getProjectSettings(),
       updateSettings: (p, patch) => this.updateProjectSettings(p, patch),
+      create: async (input) => {
+        this.track(`createProject:${input.domain_or_name}`);
+        return { project_id: 'aaaaaaaaaaaaaaaa', homepage: `https://${input.domain_or_name}`, engine: input.engine ?? 'google.com', language: input.language ?? 'English' };
+      },
     },
   };
 
@@ -143,10 +147,10 @@ const call = (name: string, args: Record<string, unknown> = {}) => client.callTo
 const text = (result: CallToolResult) => (result.content[0] as { text: string }).text;
 
 describe('tool surface', () => {
-  it('exposes 17 nw_ tools, each with title, long description, output schema and all four annotations', async () => {
+  it('exposes the nw_ tools, each with title, long description, output schema and all four annotations', async () => {
     const { tools } = await client.listTools();
     expect(tools.map((t) => t.name).sort()).toEqual([
-      'nw_add_content_plan_idea', 'nw_create_query', 'nw_fetch_page', 'nw_generate_ai', 'nw_get_content', 'nw_get_project_settings',
+      'nw_add_content_plan_idea', 'nw_create_project', 'nw_create_query', 'nw_fetch_page', 'nw_generate_ai', 'nw_get_content', 'nw_get_project_settings',
       'nw_get_recommendations', 'nw_import_content', 'nw_list_content_plan', 'nw_list_projects', 'nw_list_queries', 'nw_score_content',
       'nw_select_competitors', 'nw_set_done', 'nw_status', 'nw_update_project_settings', 'nw_update_tags',
     ]);
@@ -237,6 +241,14 @@ describe('management tools', () => {
     expect(backend.calls).toContain('updateProjectSettings:ai_profile');
     expect(result.structuredContent).toMatchObject({ name: 'makkahdecorsa.com', ai_profile: { brand_voice: 'ودود', overview: '' } });
     expect((await call('nw_update_project_settings', { project: '6ec9249b8de0a586' })).isError).toBe(true);
+  });
+
+  it('creates a project only with confirm', async () => {
+    const refused = await call('nw_create_project', { mode: 'domain', domain_or_name: 'atalanajd.com' });
+    expect(refused.isError).toBe(true);
+    expect(backend.calls).toEqual([]);
+    const created = await call('nw_create_project', { mode: 'domain', domain_or_name: 'atalanajd.com', engine: 'google.com.sa', language: 'Arabic', confirm: true });
+    expect(created.structuredContent).toMatchObject({ project_id: 'aaaaaaaaaaaaaaaa', engine: 'google.com.sa' });
   });
 
   it('adds content plan ideas', async () => {

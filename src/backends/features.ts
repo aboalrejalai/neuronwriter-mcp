@@ -28,6 +28,17 @@ export interface ProjectFeatures {
   getSettings(projectId: string, signal?: AbortSignal): Promise<ProjectSettings>;
   /** Reads every setting, applies the patch and saves the whole form (the app's only way to save). */
   updateSettings(projectId: string, patch: ProjectSettingsPatch, signal?: AbortSignal): Promise<ProjectSettings>;
+  /** Uses one of the plan's project slots. */
+  create(input: NewProjectInput, signal?: AbortSignal): Promise<{ project_id: string; homepage: string; engine: string; language: string }>;
+}
+
+export interface NewProjectInput {
+  mode: 'domain' | 'nondomain';
+  /** Domain (domain mode) or project name (non-domain mode). */
+  domain_or_name: string;
+  engine?: string;
+  language?: string;
+  keywords?: string[];
 }
 
 export interface SessionFeatures {

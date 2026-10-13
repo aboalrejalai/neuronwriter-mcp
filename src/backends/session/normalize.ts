@@ -147,7 +147,7 @@ export function interpretResponse(response: InPageResponse): Record<string, unkn
 function errorText(data: unknown): string | null {
   if (!data || typeof data !== 'object') return null;
   const record = data as Record<string, unknown>;
-  if (typeof record.error === 'string' && record.error) return record.error;
+  if (typeof record.error === 'string' && record.error) return htmlToText(record.error) ?? record.error;
   if (Array.isArray(record.errors) && record.errors.length) return record.errors.map(String).join(' ');
   if (typeof record.errors === 'string' && record.errors) return record.errors;
   if (record.status === 'error') return typeof record.message === 'string' ? record.message : 'NeuronWriter reported an error.';

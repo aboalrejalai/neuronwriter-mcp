@@ -2,7 +2,8 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { Backend } from '../backends/Backend.js';
 import { NwError } from '../errors.js';
-import { READ_ONLY, handle, ok, projectId, requireSession } from './shared.js';
+import { ConfirmationRequiredError } from '../errors.js';
+import { READ_ONLY, confirm, handle, ok, projectId, requireSession } from './shared.js';
 
 const lineList = z.array(z.string().min(1).max(300)).max(500);
 
@@ -32,6 +33,33 @@ const ideaShape = z.object({
 });
 
 export function registerProjectTools(server: McpServer, backend: Backend): void {
+  server.registerTool(
+    'nw_create_project',
+    {
+      title: 'Create a project (uses a project slot)',
+      description:
+        'Creates a NeuronWriter project, like the New project wizard: a domain project (e.g. "example.com"; enables AI Visibility and site-level features) or a non-domain project with a name. ' +
+        'It uses one of the plan\'s project slots (the Bronze plan has 2), so check nw_status first and ask the user; requires confirm: true. ' +
+        'Search engine and language default to what NeuronWriter suggests for the domain; pass them to override (e.g. google.com.sa and Arabic). ' +
+        'Fill the rest (brand keywords, AI Profile, domains) with nw_update_project_settings afterwards.',
+      inputSchema: z.strictObject({
+        mode: z.enum(['domain', 'nondomain']),
+        domain_or_name: z.string().min(2).max(200).describe('Domain without protocol in domain mode (example.com); the project name otherwise.'),
+        engine: z.string().min(4).max(40).optional(),
+        language: z.string().min(2).max(40).optional(),
+        keywords: lineList.optional().describe('Desired keywords, one per item.'),
+        confirm,
+      }),
+      outputSchema: z.object({ project_id: z.string(), homepage: z.string(), engine: z.string(), language: z.string() }),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    },
+    handle(async (args, extra) => {
+      if (!args.confirm) throw new ConfirmationRequiredError('one of the plan\'s project slots');
+      const created = await requireSession(backend, 'Creating projects').projects.create(args, extra.signal);
+      return ok(`Created project ${created.project_id} (${created.homepage}, ${created.engine}, ${created.language}).`, { ...created });
+    }),
+  );
+
   server.registerTool(
     'nw_get_project_settings',
     {
