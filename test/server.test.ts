@@ -40,6 +40,12 @@ class FakeBackend implements Backend {
       updateContentPlanIdea: async (_p, id, field, value) => void this.track(`cp:${id}:${field}:${value}`),
       listCalendar: async (_p, from, to) => [{ id: 't1', type: 'task', title: `${from}..${to}`, start: from, end: null, status: 'New' }],
     },
+    lookup: {
+      locations: async (_p, q) => (q.startsWith('Bur') ? [{ id: '1001', name: 'Buraidah, Al-Qassim, Saudi Arabia' }] : [{ id: '1', name: 'Riyadh, Riyadh, Saudi Arabia' }, { id: '2', name: 'Riyadh Al Khabra, Al-Qassim, Saudi Arabia' }]),
+      urlKeywords: async () => [],
+      suggestTargetUrl: async () => ['https://atalanajd.com/'],
+      hubPages: async () => [],
+    },
     visibility: {
       overview: async () => ({ available: true, message: null, brands: ['أطلالة نجد'], prompts_used: 0, prompts_available: 5, initialization: null, prompts: [] }),
       promptDetails: async () => 'details',
@@ -98,7 +104,7 @@ class FakeBackend implements Backend {
     this.track(`setDone:${done}`);
   }
   async createQuery(input: CreateQueryInput): Promise<{ query_id: string | null }> {
-    this.track(`createQuery:${input.keyword}`);
+    this.track(`createQuery:${input.keyword}${input.geolocation ? `@${input.geolocation}` : ''}`);
     return { query_id: 'abcdefabcdefabcd' };
   }
   async generateAi(_q: string, request: AiRequest): Promise<AiResult> {
@@ -363,6 +369,13 @@ describe('errors and safety', () => {
   it('creates the analysis once confirmed', async () => {
     const result = await call('nw_create_query', { project: '6ec9249b8de0a586', keyword: 'new keyword', engine: 'google.com', language: 'English', confirm: true });
     expect(result.structuredContent).toMatchObject({ query_id: 'abcdefabcdefabcd', existing: false, spent_analysis: true });
+  });
+
+  it('resolves a city before creating, and refuses ambiguous ones', async () => {
+    const amb = await call('nw_create_query', { project: '6ec9249b8de0a586', keyword: 'مقاول', engine: 'google.com.sa', language: 'Arabic', city: 'Riy', confirm: true });
+    expect(text(amb)).toContain('ambiguous');
+    await call('nw_create_query', { project: '6ec9249b8de0a586', keyword: 'مقاول', engine: 'google.com.sa', language: 'Arabic', city: 'Buraidah', confirm: true });
+    expect(backend.calls).toContain('createQuery:مقاول@1001');
   });
 
   it('rejects keywords with characters NeuronWriter forbids', async () => {

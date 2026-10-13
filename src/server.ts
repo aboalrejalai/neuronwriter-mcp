@@ -6,6 +6,7 @@ import { registerAiTools } from './tools/ai.js';
 import { registerAnalysisTools } from './tools/analysis.js';
 import { registerContentTools, registerPageTools } from './tools/content.js';
 import { registerDetailTools } from './tools/details.js';
+import { registerLookupTools } from './tools/lookup.js';
 import { registerMaintenanceTools } from './tools/maintenance.js';
 import { registerPlanningTools } from './tools/planning.js';
 import { registerProjectTools } from './tools/projects.js';
@@ -33,6 +34,7 @@ export function createServer(backend: Backend): McpServer {
   registerContentTools(server, backend);
   registerPageTools(server, backend);
   registerMaintenanceTools(server, backend);
+  registerLookupTools(server, backend);
   registerAiTools(server, backend);
   return server;
 }

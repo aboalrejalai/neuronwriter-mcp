@@ -125,6 +125,15 @@ export interface CalendarEntry {
   status: string | null;
 }
 
+export interface LookupFeatures {
+  locations(projectId: string, query: string, engine: string, signal?: AbortSignal): Promise<Array<{ id: string; name: string }>>;
+  /** Search Console keywords of a URL (needs Search Console connected to the project). */
+  urlKeywords(projectId: string, url: string, signal?: AbortSignal): Promise<Array<{ text: string; cells: string[] }>>;
+  /** Which page of the project should own a keyword. */
+  suggestTargetUrl(projectId: string, keyword: string, signal?: AbortSignal): Promise<string[]>;
+  hubPages(projectId: string, url: string, signal?: AbortSignal): Promise<Array<{ text: string; cells: string[] }>>;
+}
+
 export interface VisibilityFeatures {
   overview(projectId: string, signal?: AbortSignal): Promise<VisibilityOverview>;
   promptDetails(projectId: string, promptId: string, view: 'overview' | 'earn-mention', signal?: AbortSignal): Promise<string>;
@@ -166,4 +175,5 @@ export interface SessionFeatures {
   planning: PlanningFeatures;
   projects: ProjectFeatures;
   visibility: VisibilityFeatures;
+  lookup: LookupFeatures;
 }

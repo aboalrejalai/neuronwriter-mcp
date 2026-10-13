@@ -7,7 +7,8 @@ import { SessionAnalysis } from './features/analysis.js';
 import { SessionPlanning } from './features/planning.js';
 import { SessionProjects } from './features/projects.js';
 import { SessionVisibility } from './features/visibility.js';
-import { judgeTerms, normalizeAnalysisPage, normalizeQueryRows, normalizeScore, parseProfileText, pickRevision } from './normalize.js';
+import { SessionLookup } from './features/lookup.js';
+import { htmlToText, judgeTerms, normalizeAnalysisPage, normalizeQueryRows, normalizeScore, parseProfileText, pickRevision } from './normalize.js';
 import { buildCheckReadabilityBody, buildSaveContentBody, headingIdeasLoaded, readAnalysisPage, readAnalysisSig, readRevisions, readTermContext } from './pageScripts/analysis.js';
 import { readProjectsNav, readQueriesTable } from './pageScripts/project.js';
 import { SessionCore } from './SessionCore.js';
@@ -29,6 +30,7 @@ export class SessionBackend implements Backend {
       planning: new SessionPlanning(core),
       projects: new SessionProjects(core),
       visibility: new SessionVisibility(core),
+      lookup: new SessionLookup(core),
     };
   }
 
@@ -94,23 +96,27 @@ export class SessionBackend implements Backend {
   async createQuery(input: CreateQueryInput, signal?: AbortSignal): Promise<{ query_id: string | null }> {
     const page = await this.core.open(PAGES.project(input.project), signal);
     // Same body add_new_analysis() sends for a single keyword with the form's defaults.
-    await this.core.post(page, 'newAnalysis', {
+    const data = await this.core.post(page, 'newAnalysis', {
       project: input.project,
       is_multiple_analysis: 0,
       keyword: input.keyword,
       multiple_keywords: '',
-      custom_competitors: '',
+      custom_competitors: (input.custom_competitors ?? []).slice(0, 5).join('\n'),
       additional_keywords: (input.additional_keywords ?? []).join('\n'),
-      target_url: '',
+      target_url: input.target_url ?? '',
       engine: input.engine,
       language: input.language,
       prefer_lang: '',
       update_inventory: 0,
       assigned_to: '',
       deadline: '',
-      geolocation_mode: 'country',
-      geolocation: null,
+      geolocation_mode: input.geolocation ? 'city' : 'country',
+      geolocation: input.geolocation ?? null,
     }, signal);
+    if (data.update_status === 'ask') {
+      // The target URL already belongs to another keyword in the project inventory; the app asks before moving it.
+      throw new NeuronWriterError(`NeuronWriter asks before changing the target URL: ${htmlToText(JSON.stringify(data.question_data ?? '')) ?? 'URL collision'}`, 'Create the analysis without target_url, or set it later with nw_update_analysis.');
+    }
     const queries = await this.listQueries(input.project, signal);
     const created = queries.find((q) => q.keyword.trim() === input.keyword.trim());
     return { query_id: created?.id ?? null };

@@ -163,6 +163,9 @@ export function registerQueryTools(server: McpServer, backend: Backend): void {
         engine: z.string().min(4).max(40).describe('Google domain for the target market, e.g. google.com.sa (Saudi Arabia) or google.com.'),
         language: z.string().min(2).max(40).describe('Content language name as NeuronWriter lists it, e.g. Arabic or English.'),
         additional_keywords: z.array(z.string().min(1).max(200)).max(20).optional().describe('Supporting keywords, one per item.'),
+        custom_competitors: z.array(z.string().url()).max(5).optional().describe('Up to 5 URLs to analyse alongside the SERP results (session backend).'),
+        target_url: z.string().url().optional().describe('The page meant to rank for this keyword (session backend).'),
+        city: z.string().min(2).max(100).optional().describe('Target a city instead of the whole country, e.g. "Buraidah" (session backend; resolved with nw_lookup locations).'),
         force: z.boolean().default(false).describe('Create even if an analysis with the same keyword exists.'),
         confirm,
       }),
@@ -185,8 +188,19 @@ export function registerQueryTools(server: McpServer, backend: Backend): void {
         }
       }
       if (!args.confirm) throw new ConfirmationRequiredError('1 of the monthly Content Writer analyses');
+      let geolocation: string | undefined;
+      if (args.city) {
+        const places = await requireSession(backend, 'City targeting').lookup.locations(args.project, args.city, args.engine, extra.signal);
+        const exact = places.filter((p) => p.name.split(',')[0].trim().toLowerCase() === args.city!.trim().toLowerCase());
+        const pick = exact.length === 1 ? exact[0] : places.length === 1 ? places[0] : null;
+        if (!pick) throw new NwError(`City "${args.city}" is ${places.length ? 'ambiguous' : 'unknown'} for ${args.engine}.`, places.length ? `Use one of: ${places.slice(0, 8).map((p) => p.name).join(' | ')}` : 'Try the English name, or nw_lookup action "locations".');
+        geolocation = pick.id;
+      }
       const { query_id } = await backend.createQuery(
-        { project: args.project, keyword: args.keyword, engine: args.engine, language: args.language, additional_keywords: args.additional_keywords },
+        {
+          project: args.project, keyword: args.keyword, engine: args.engine, language: args.language, additional_keywords: args.additional_keywords,
+          custom_competitors: args.custom_competitors, target_url: args.target_url, geolocation,
+        },
         extra.signal,
       );
       const summary = query_id

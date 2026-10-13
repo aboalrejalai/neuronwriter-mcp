@@ -117,6 +117,12 @@ export interface CreateQueryInput {
   engine: string;
   language: string;
   additional_keywords?: string[];
+  /** Up to 5 URLs analysed alongside the SERP results (session backend). */
+  custom_competitors?: string[];
+  /** The page meant to rank for the keyword (session backend). */
+  target_url?: string;
+  /** City-level location id from nw_lookup "locations" (session backend). */
+  geolocation?: string;
 }
 
 /** Writing kinds: NeuronWriter templates run on one analysis. */
