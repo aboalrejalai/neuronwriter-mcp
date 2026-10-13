@@ -80,6 +80,59 @@ export interface AiFeatures {
 export interface PlanningFeatures {
   listContentPlan(projectId: string, signal?: AbortSignal): Promise<ContentPlanIdea[]>;
   addContentPlanIdea(projectId: string, keyword: string, additionalKeywords: string[], signal?: AbortSignal): Promise<void>;
+  deleteContentPlanIdea(projectId: string, ideaId: string, signal?: AbortSignal): Promise<void>;
+  updateContentPlanIdea(projectId: string, ideaId: string, field: 'assigned_to' | 'deadline', value: string, signal?: AbortSignal): Promise<void>;
+  /** Content management calendar: tasks, analyses and plan items with dates in [from, to). */
+  listCalendar(projectId: string, from: string, to: string, filters: { status?: string; assigned_to?: string }, signal?: AbortSignal): Promise<CalendarEntry[]>;
+  getTask(projectId: string, taskId: string, signal?: AbortSignal): Promise<Task>;
+  /** Creates (no task_id) or updates a task; on update every unspecified field keeps its value. */
+  saveTask(projectId: string, task: Partial<Task> & { title?: string }, signal?: AbortSignal): Promise<void>;
+}
+
+export interface CalendarEntry {
+  id: string;
+  type: string;
+  title: string;
+  start: string | null;
+  end: string | null;
+  status: string | null;
+}
+
+export const TASK_STATUSES = ['New', 'TODO', 'In progress', 'Done', 'Deleted'] as const;
+
+export interface Task {
+  task_id: string;
+  title: string;
+  keyword: string;
+  url: string;
+  analysis: string;
+  assigned_to: string;
+  start_date: string;
+  due_date: string;
+  status: string;
+  details: string;
+  cost: string;
+  supplemental_keywords: string;
+  tags: string;
+  groups: string;
+}
+
+export interface VisibilityFeatures {
+  overview(projectId: string, signal?: AbortSignal): Promise<VisibilityOverview>;
+  promptDetails(projectId: string, promptId: string, view: 'overview' | 'earn-mention', signal?: AbortSignal): Promise<string>;
+  setBrands(projectId: string, brands: string[], signal?: AbortSignal): Promise<void>;
+  addPrompts(projectId: string, prompts: string[], signal?: AbortSignal): Promise<void>;
+  deletePrompt(projectId: string, promptId: string, signal?: AbortSignal): Promise<void>;
+}
+
+export interface VisibilityOverview {
+  available: boolean;
+  message: string | null;
+  brands: string[];
+  prompts_used: number | null;
+  prompts_available: number | null;
+  initialization: { progress: number | null; description: string | null } | null;
+  prompts: Array<{ id: string; prompt: string; details: string }>;
 }
 
 export interface ProjectFeatures {
@@ -104,4 +157,5 @@ export interface SessionFeatures {
   ai: AiFeatures;
   planning: PlanningFeatures;
   projects: ProjectFeatures;
+  visibility: VisibilityFeatures;
 }

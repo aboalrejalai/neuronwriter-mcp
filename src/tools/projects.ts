@@ -23,15 +23,6 @@ const settingsShape = {
   wordpress: z.object({ user: z.string(), password_set: z.boolean(), subdirectory: z.boolean(), subdirectory_url: z.string() }),
 };
 
-const ideaShape = z.object({
-  id: z.string(),
-  keyword: z.string(),
-  additional_keywords: z.array(z.string()),
-  added: z.string().nullable(),
-  assigned_to: z.string().nullable(),
-  expected: z.string().nullable(),
-});
-
 export function registerProjectTools(server: McpServer, backend: Backend): void {
   server.registerTool(
     'nw_create_project',
@@ -115,48 +106,6 @@ export function registerProjectTools(server: McpServer, backend: Backend): void 
       if (Object.keys(patch).length === 0) throw new NwError('Nothing to change.', 'Pass at least one setting to update.');
       const settings = await requireSession(backend, 'Project settings').projects.updateSettings(project, patch, extra.signal);
       return ok(`Saved settings of "${settings.name || settings.homepage}".`, { ...settings });
-    }),
-  );
-
-  server.registerTool(
-    'nw_list_content_plan',
-    {
-      title: 'List content plan ideas',
-      description:
-        "Lists the ideas in a project's Content plan: keyword, supporting keywords, date added, person and expected date. " +
-        'Use it to pick the next article to write, then create its analysis with nw_create_query (the analysis is what costs credits, not the idea). ' +
-        'Spends nothing; session backend only.',
-      inputSchema: z.strictObject({ project: projectId }),
-      outputSchema: z.object({ project: z.string(), ideas: z.array(ideaShape) }),
-      annotations: READ_ONLY,
-    },
-    handle(async (args, extra) => {
-      const ideas = await requireSession(backend, 'The content plan').planning.listContentPlan(args.project, extra.signal);
-      return ok(`${ideas.length} idea(s) in the content plan.`, { project: args.project, ideas });
-    }),
-  );
-
-  server.registerTool(
-    'nw_add_content_plan_idea',
-    {
-      title: 'Add an idea to the content plan',
-      description:
-        "Adds a keyword idea (with optional supporting keywords) to a project's Content plan, like the plan's \"New idea\" button. " +
-        'Use it to queue future articles without spending an analysis; check nw_list_content_plan first to avoid duplicates. ' +
-        'Spends nothing; session backend only.',
-      inputSchema: z.strictObject({
-        project: projectId,
-        keyword: z.string().min(1).max(200),
-        additional_keywords: z.array(z.string().min(1).max(200)).max(20).default([]),
-      }),
-      outputSchema: z.object({ project: z.string(), ideas: z.array(ideaShape) }),
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
-    },
-    handle(async (args, extra) => {
-      const planning = requireSession(backend, 'The content plan').planning;
-      await planning.addContentPlanIdea(args.project, args.keyword, args.additional_keywords, extra.signal);
-      const ideas = await planning.listContentPlan(args.project, extra.signal);
-      return ok(`Added "${args.keyword}" to the content plan (${ideas.length} idea(s) now).`, { project: args.project, ideas });
     }),
   );
 }

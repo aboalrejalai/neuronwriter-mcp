@@ -36,6 +36,18 @@ class FakeBackend implements Backend {
     planning: {
       listContentPlan: () => this.listContentPlan(),
       addContentPlanIdea: (p, k, a) => this.addContentPlanIdea(p, k, a),
+      deleteContentPlanIdea: async (_p, id) => void (this.ideas = this.ideas.filter((i) => i.id !== id)),
+      updateContentPlanIdea: async (_p, id, field, value) => void this.track(`cp:${id}:${field}:${value}`),
+      listCalendar: async (_p, from, to) => [{ id: 't1', type: 'task', title: `${from}..${to}`, start: from, end: null, status: 'New' }],
+      getTask: async (_p, id) => ({ task_id: id, title: 'T', keyword: '', url: '', analysis: '', assigned_to: '', start_date: '', due_date: '', status: 'New', details: '', cost: '', supplemental_keywords: '', tags: '', groups: '' }),
+      saveTask: async (_p, task) => void this.track(`saveTask:${task.task_id ?? 'new'}:${task.title ?? ''}`),
+    },
+    visibility: {
+      overview: async () => ({ available: true, message: null, brands: ['أطلالة نجد'], prompts_used: 0, prompts_available: 5, initialization: null, prompts: [] }),
+      promptDetails: async () => 'details',
+      setBrands: async (_p, b) => void this.track(`brands:${b.join('|')}`),
+      addPrompts: async (_p, pr) => void this.track(`prompts:${pr.length}`),
+      deletePrompt: async (_p, id) => void this.track(`deletePrompt:${id}`),
     },
     projects: {
       getSettings: () => this.getProjectSettings(),
@@ -285,9 +297,23 @@ describe('management tools', () => {
     expect(created.structuredContent).toMatchObject({ project_id: 'aaaaaaaaaaaaaaaa', engine: 'google.com.sa' });
   });
 
-  it('adds content plan ideas', async () => {
-    const result = await call('nw_add_content_plan_idea', { project: '6ec9249b8de0a586', keyword: 'بديل الرخام مكة', additional_keywords: ['بديل الرخام'] });
+  it('adds and deletes content plan ideas', async () => {
+    const result = await call('nw_update_content_plan', { project: '6ec9249b8de0a586', action: 'add', keyword: 'بديل الرخام مكة', additional_keywords: ['بديل الرخام'] });
     expect(result.structuredContent).toMatchObject({ ideas: [{ keyword: 'بديل الرخام مكة', additional_keywords: ['بديل الرخام'] }] });
+    expect((await call('nw_update_content_plan', { project: '6ec9249b8de0a586', action: 'deadline', idea_id: 'x', value: '20/10' })).isError).toBe(true);
+    const deleted = await call('nw_update_content_plan', { project: '6ec9249b8de0a586', action: 'delete', idea_id: 'x' });
+    expect(deleted.structuredContent).toMatchObject({ ideas: [] });
+  });
+
+  it('reads planning parts and saves tasks', async () => {
+    const cal = await call('nw_get_project_data', { project: '6ec9249b8de0a586', part: 'calendar', from: '2026-10-13' });
+    expect(cal.structuredContent).toMatchObject({ part: 'calendar', data: [{ title: '2026-10-13..2026-11-12' }] });
+    expect((await call('nw_get_project_data', { project: '6ec9249b8de0a586', part: 'task' })).isError).toBe(true);
+    const vis = await call('nw_get_project_data', { project: '6ec9249b8de0a586', part: 'ai_visibility' });
+    expect(vis.structuredContent).toMatchObject({ data: { prompts_available: 5 } });
+    expect((await call('nw_save_task', { project: '6ec9249b8de0a586' })).isError).toBe(true);
+    await call('nw_save_task', { project: '6ec9249b8de0a586', title: 'كتابة مقال', due_date: '2026-10-20' });
+    expect(backend.calls).toContain('saveTask:new:كتابة مقال');
   });
 });
 

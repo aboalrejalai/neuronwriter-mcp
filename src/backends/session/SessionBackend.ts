@@ -6,6 +6,7 @@ import { SessionAi } from './features/ai.js';
 import { SessionAnalysis } from './features/analysis.js';
 import { SessionPlanning } from './features/planning.js';
 import { SessionProjects } from './features/projects.js';
+import { SessionVisibility } from './features/visibility.js';
 import { judgeTerms, normalizeAnalysisPage, normalizeQueryRows, normalizeScore, parseProfileText, pickRevision } from './normalize.js';
 import { buildCheckReadabilityBody, buildSaveContentBody, headingIdeasLoaded, readAnalysisPage, readAnalysisSig, readRevisions, readTermContext } from './pageScripts/analysis.js';
 import { readProjectsNav, readQueriesTable } from './pageScripts/project.js';
@@ -27,6 +28,7 @@ export class SessionBackend implements Backend {
       ai: new SessionAi(core),
       planning: new SessionPlanning(core),
       projects: new SessionProjects(core),
+      visibility: new SessionVisibility(core),
     };
   }
 

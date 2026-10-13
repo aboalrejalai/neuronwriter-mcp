@@ -139,3 +139,32 @@ export function readVolumeTargeting(): string | null {
   }
   return null;
 }
+
+declare const AI_TRACKER_PROMPTS_AVAILABLE: number | undefined;
+declare const AI_TRACKER_PROMPTS_USED: number | undefined;
+
+export interface RawVisibilityPage {
+  domainOnly: boolean;
+  brands: string;
+  used: number | null;
+  available: number | null;
+  prompts: Array<{ id: string; text: string }>;
+}
+
+/** /project/view/<id>/ai-tracker: brands, prompt slots and monitored prompts (rows open show_monitored_prompt_details('<sig>')). */
+export function readVisibilityPage(): RawVisibilityPage {
+  const prompts = new Map<string, string>();
+  for (const el of document.querySelectorAll('[onclick*="show_monitored_prompt_details"]')) {
+    const id = (el.getAttribute('onclick') ?? '').match(/show_monitored_prompt_details\('([^']+)'/)?.[1];
+    if (!id || prompts.has(id)) continue;
+    const row = el.closest('tr, li, .card, .monitored-prompt') ?? el;
+    prompts.set(id, (row.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 300));
+  }
+  return {
+    domainOnly: /Domain-related projects only/i.test(document.body.innerText),
+    brands: (document.getElementById('tracker-configuration-brand-names') as HTMLTextAreaElement | null)?.value ?? '',
+    used: typeof AI_TRACKER_PROMPTS_USED !== 'undefined' ? AI_TRACKER_PROMPTS_USED : null,
+    available: typeof AI_TRACKER_PROMPTS_AVAILABLE !== 'undefined' ? AI_TRACKER_PROMPTS_AVAILABLE : null,
+    prompts: [...prompts].map(([id, text]) => ({ id, text })),
+  };
+}
