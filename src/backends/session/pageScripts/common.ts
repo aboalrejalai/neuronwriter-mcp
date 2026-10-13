@@ -41,3 +41,26 @@ export async function requestFromPage(args: InPageRequest): Promise<InPageRespon
     text: await response.text(),
   };
 }
+
+export interface HtmlRow {
+  id: string;
+  text: string;
+  cells: string[];
+  links: string[];
+  onclicks: string[];
+}
+
+/** Parses server-rendered HTML fragments (internal links, ideas, comments) into rows, inside the page's own DOM parser. */
+export function parseHtmlRows(args: { html: string | null; selector: string; container?: string }): HtmlRow[] {
+  const root = document.createElement('div');
+  if (args.html !== null) root.innerHTML = args.html;
+  const scope = args.html === null ? (args.container ? document.querySelector(args.container) : document) : root;
+  if (!scope) return [];
+  return [...scope.querySelectorAll(args.selector)].map((row) => ({
+    id: row.id,
+    text: (row.textContent ?? '').replace(/\s+/g, ' ').trim(),
+    cells: [...row.querySelectorAll(':scope > td, :scope > th')].map((c) => (c.textContent ?? '').replace(/\s+/g, ' ').trim()),
+    links: [...row.querySelectorAll('a[href]')].map((a) => a.getAttribute('href') ?? '').filter((h) => h && !h.startsWith('#') && !h.startsWith('javascript')),
+    onclicks: [...row.querySelectorAll('[onclick]')].map((el) => el.getAttribute('onclick') ?? ''),
+  }));
+}

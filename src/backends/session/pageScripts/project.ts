@@ -137,7 +137,9 @@ export function readVolumeTargeting(): string | null {
     const match = (el.getAttribute('onclick') ?? '').match(/request_search_volume_update\('([^']+)'\)/);
     if (match) return match[1];
   }
-  return null;
+  // Before any volume exists the button is absent; each analysis row's engine flag says "Targeting: ar|google.com.sa".
+  const flag = document.querySelector('[data-bs-original-title^="Targeting: "]');
+  return flag?.getAttribute('data-bs-original-title')?.replace('Targeting: ', '').trim() || null;
 }
 
 declare const AI_TRACKER_PROMPTS_AVAILABLE: number | undefined;
@@ -158,7 +160,8 @@ export function readVisibilityPage(): RawVisibilityPage {
     const id = (el.getAttribute('onclick') ?? '').match(/show_monitored_prompt_details\('([^']+)'/)?.[1];
     if (!id || prompts.has(id)) continue;
     const row = el.closest('tr, li, .card, .monitored-prompt') ?? el;
-    prompts.set(id, (row.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 300));
+    const text = (row.textContent ?? '').replace(/\s+/g, ' ').replace(/^Create\s+/, '').replace(/\s*Update status:.*$/, '').trim();
+    prompts.set(id, text.slice(0, 300));
   }
   return {
     domainOnly: /Domain-related projects only/i.test(document.body.innerText),

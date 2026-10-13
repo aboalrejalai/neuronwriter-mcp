@@ -23,7 +23,7 @@ export class SessionVisibility implements VisibilityFeatures {
       brands: raw.brands.split('\n').map((b) => b.trim()).filter(Boolean),
       prompts_used: raw.used,
       prompts_available: raw.available,
-      initialization: init ? { progress: typeof init.progress === 'number' ? init.progress : null, description: htmlToText(init.progress_desc) ?? htmlToText(init.subheading) } : null,
+      initialization: init ? { progress: typeof init.progress === 'number' ? init.progress : null, description: (htmlToText(init.subheading) ?? htmlToText(init.progress_desc))?.slice(0, 300) ?? null } : null,
       prompts: raw.prompts.map((p) => ({ id: p.id, prompt: p.text, details: '' })),
     };
   }
@@ -45,7 +45,8 @@ export class SessionVisibility implements VisibilityFeatures {
   }
 
   async deletePrompt(projectId: string, promptId: string, signal?: AbortSignal): Promise<void> {
-    const page = await this.requireDomain(projectId, signal);
+    // Not through the AI Visibility page: it answers HTTP 500 while a new prompt initializes (seen 2026-10-13).
+    const page = await this.core.open(PAGES.project(projectId), signal);
     await this.core.post(page, 'trackerDeletePrompt', { project: projectId, prompt: promptId }, signal);
   }
 

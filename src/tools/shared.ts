@@ -3,7 +3,7 @@ import type { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/proto
 import { z } from 'zod';
 import type { Backend, TermUsage } from '../backends/Backend.js';
 import type { SessionFeatures } from '../backends/features.js';
-import { NotSupportedError, NwError } from '../errors.js';
+import { NotSupportedError, NwError, RetryableError } from '../errors.js';
 import { log } from '../log.js';
 
 export type Extra = RequestHandlerExtra<ServerRequest, ServerNotification>;
@@ -79,6 +79,8 @@ export function fail(error: unknown): CallToolResult {
   let text: string;
   if (error instanceof NwError) {
     text = `${error.message}\nNext step: ${error.hint}`;
+  } else if (error instanceof RetryableError) {
+    text = `${error.message} (a temporary NeuronWriter server error; it was retried with backoff).\nNext step: wait a minute and call the tool again; for writes, first check with a read tool whether the change went through.`;
   } else if (error instanceof Error && error.name === 'AbortError') {
     text = 'The request was cancelled.';
   } else {

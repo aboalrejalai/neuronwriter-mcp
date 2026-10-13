@@ -1,10 +1,11 @@
 import { NeuronWriterError } from '../../../errors.js';
 import { APP_URL, type CompetitorSelection, type ContentInput, type PageContent } from '../../Backend.js';
-import type { AnalysisFeatures, AnalysisPatch, PlagiarismResult, TermAction } from '../../features.js';
+import type { AnalysisFeatures, AnalysisPatch, Comment, ContentIdea, InternalLink, PlagiarismResult, TermAction } from '../../features.js';
 import { PAGES } from '../endpoints.js';
 import { LONG_TIMEOUT_MS, type SessionCore } from '../SessionCore.js';
-import { buildUrlImportBody, htmlText, isContaduTerm, minimalHtml, readAnalysisSig, readCompetitorSwitches, readProjectSig } from '../pageScripts/analysis.js';
+import { buildUrlImportBody, htmlText, readRevisions, isContaduTerm, minimalHtml, readAnalysisSig, readCompetitorSwitches, readProjectSig } from '../pageScripts/analysis.js';
 import { readVolumeTargeting } from '../pageScripts/project.js';
+import { parseHtmlRows } from '../pageScripts/common.js';
 
 export class SessionAnalysis implements AnalysisFeatures {
   constructor(private readonly core: SessionCore) {}
@@ -134,5 +135,75 @@ export class SessionAnalysis implements AnalysisFeatures {
     }, signal, LONG_TIMEOUT_MS);
     if (typeof data.download_data !== 'string') throw new NeuronWriterError('NeuronWriter returned no file.', 'Retry once; if it fails again, export from the web editor.');
     return Uint8Array.from(Buffer.from(data.download_data, 'base64'));
+  }
+
+  async listRevisions(queryId: string, signal?: AbortSignal) {
+    const page = await this.core.openAnalysis(queryId, signal);
+    const { revisions } = await page.evaluate(readRevisions);
+    return (Array.isArray(revisions) ? revisions : []).map((r) => {
+      const label = String((r as unknown[])[1] ?? '');
+      return { revision: String((r as unknown[])[0] ?? ''), saved_at: label.replace('[autosave] ', ''), autosave: label.startsWith('[autosave]') };
+    });
+  }
+
+  async listComments(queryId: string, signal?: AbortSignal): Promise<Comment[]> {
+    const page = await this.core.openAnalysis(queryId, signal);
+    const rows = await page.evaluate(parseHtmlRows, { html: null, selector: '[id^="comment-wrapper-"]', container: '#user-comments-container' });
+    return rows.map((row) => ({ id: row.id.replace('comment-wrapper-', ''), text: row.text, parent_id: null }));
+  }
+
+  async addComment(queryId: string, text: string, parentId: string | null, signal?: AbortSignal): Promise<string | null> {
+    const page = await this.core.openAnalysis(queryId, signal);
+    const data = await this.core.post(page, 'addComment', { comment: text, analysis: await page.evaluate(readAnalysisSig), selection_mode: false, parent_id: parentId }, signal);
+    return data.new_comment_id ? String(data.new_comment_id) : null;
+  }
+
+  async editComment(queryId: string, commentId: string, text: string, signal?: AbortSignal): Promise<void> {
+    const page = await this.core.openAnalysis(queryId, signal);
+    await this.core.post(page, 'editComment', { comment_id: commentId, comment: text, analysis: await page.evaluate(readAnalysisSig) }, signal);
+  }
+
+  async setCommentStatus(queryId: string, commentId: string, status: 'resolved' | 'deleted', signal?: AbortSignal): Promise<void> {
+    const page = await this.core.openAnalysis(queryId, signal);
+    await this.core.post(page, 'updateCommentStatus', { comment_id: commentId, analysis: await page.evaluate(readAnalysisSig), new_status: status }, signal);
+  }
+
+  async internalLinks(queryId: string, signal?: AbortSignal): Promise<InternalLink[]> {
+    const page = await this.core.openAnalysis(queryId, signal);
+    const data = await this.core.post(page, 'internalLinks', { analysis: await page.evaluate(readAnalysisSig) }, signal, LONG_TIMEOUT_MS);
+    const rows = await page.evaluate(parseHtmlRows, { html: String(data.html ?? ''), selector: '[id^="il_"]' });
+    return rows.map((row) => ({ id: row.id.replace(/^il_/, ''), text: row.text, urls: row.links, cells: row.cells }));
+  }
+
+  async updateInternalLink(queryId: string, linkId: string, change: { status?: '' | 'TODO' | 'In progress' | 'Done'; note?: string }, signal?: AbortSignal): Promise<void> {
+    const page = await this.core.openAnalysis(queryId, signal);
+    const analysis = await page.evaluate(readAnalysisSig);
+    if (change.status !== undefined) await this.core.post(page, 'internalLinkStatus', { analysis, link_id: linkId, status: change.status }, signal);
+    if (change.note !== undefined) await this.core.post(page, 'internalLinkComment', { analysis, link_id: linkId, comment: change.note }, signal);
+  }
+
+  async contentIdeas(queryId: string, signal?: AbortSignal): Promise<ContentIdea[]> {
+    const page = await this.core.openAnalysis(queryId, signal);
+    const data = await this.core.post(page, 'contentIdeas', { analysis: await page.evaluate(readAnalysisSig) }, signal, LONG_TIMEOUT_MS);
+    const rows = await page.evaluate(parseHtmlRows, { html: String(data.html ?? ''), selector: 'tr, .nar-idea, li' });
+    return rows
+      .map((row) => {
+        const call = row.onclicks.find((o) => o.includes('add_to_content_plan('));
+        const config = call ? call.slice(call.indexOf('(') + 1, call.lastIndexOf(')')).trim() : null;
+        return { text: row.text, config };
+      })
+      .filter((idea) => idea.text && idea.config);
+  }
+
+  async addIdeaToPlan(queryId: string, config: string, signal?: AbortSignal): Promise<void> {
+    const page = await this.core.openAnalysis(queryId, signal);
+    // The app passes the button's argument as-is: a JS object literal or a quoted string.
+    let parsed: unknown = config;
+    try {
+      parsed = JSON.parse(config.replace(/^'|'$/g, '"'));
+    } catch {
+      /* keep the raw string */
+    }
+    await this.core.post(page, 'addIdeaToPlan', { analysis: await page.evaluate(readAnalysisSig), config: parsed }, signal);
   }
 }

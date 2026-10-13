@@ -39,8 +39,6 @@ class FakeBackend implements Backend {
       deleteContentPlanIdea: async (_p, id) => void (this.ideas = this.ideas.filter((i) => i.id !== id)),
       updateContentPlanIdea: async (_p, id, field, value) => void this.track(`cp:${id}:${field}:${value}`),
       listCalendar: async (_p, from, to) => [{ id: 't1', type: 'task', title: `${from}..${to}`, start: from, end: null, status: 'New' }],
-      getTask: async (_p, id) => ({ task_id: id, title: 'T', keyword: '', url: '', analysis: '', assigned_to: '', start_date: '', due_date: '', status: 'New', details: '', cost: '', supplemental_keywords: '', tags: '', groups: '' }),
-      saveTask: async (_p, task) => void this.track(`saveTask:${task.task_id ?? 'new'}:${task.title ?? ''}`),
     },
     visibility: {
       overview: async () => ({ available: true, message: null, brands: ['أطلالة نجد'], prompts_used: 0, prompts_available: 5, initialization: null, prompts: [] }),
@@ -305,15 +303,11 @@ describe('management tools', () => {
     expect(deleted.structuredContent).toMatchObject({ ideas: [] });
   });
 
-  it('reads planning parts and saves tasks', async () => {
+  it('reads planning parts', async () => {
     const cal = await call('nw_get_project_data', { project: '6ec9249b8de0a586', part: 'calendar', from: '2026-10-13' });
     expect(cal.structuredContent).toMatchObject({ part: 'calendar', data: [{ title: '2026-10-13..2026-11-12' }] });
-    expect((await call('nw_get_project_data', { project: '6ec9249b8de0a586', part: 'task' })).isError).toBe(true);
     const vis = await call('nw_get_project_data', { project: '6ec9249b8de0a586', part: 'ai_visibility' });
     expect(vis.structuredContent).toMatchObject({ data: { prompts_available: 5 } });
-    expect((await call('nw_save_task', { project: '6ec9249b8de0a586' })).isError).toBe(true);
-    await call('nw_save_task', { project: '6ec9249b8de0a586', title: 'كتابة مقال', due_date: '2026-10-20' });
-    expect(backend.calls).toContain('saveTask:new:كتابة مقال');
   });
 });
 

@@ -24,6 +24,36 @@ export interface AnalysisFeatures {
   checkPlagiarism(queryId: string, content: ContentInput, signal?: AbortSignal): Promise<PlagiarismResult>;
   /** NeuronWriter's DOCX export of the given content. */
   exportDocx(queryId: string, content: ContentInput, fileName: string, signal?: AbortSignal): Promise<Uint8Array>;
+  listRevisions(queryId: string, signal?: AbortSignal): Promise<Array<{ revision: string; saved_at: string; autosave: boolean }>>;
+  listComments(queryId: string, signal?: AbortSignal): Promise<Comment[]>;
+  addComment(queryId: string, text: string, parentId: string | null, signal?: AbortSignal): Promise<string | null>;
+  editComment(queryId: string, commentId: string, text: string, signal?: AbortSignal): Promise<void>;
+  setCommentStatus(queryId: string, commentId: string, status: 'resolved' | 'deleted', signal?: AbortSignal): Promise<void>;
+  /** Classic internal-link suggestions from the project's own pages. */
+  internalLinks(queryId: string, signal?: AbortSignal): Promise<InternalLink[]>;
+  updateInternalLink(queryId: string, linkId: string, change: { status?: '' | 'TODO' | 'In progress' | 'Done'; note?: string }, signal?: AbortSignal): Promise<void>;
+  /** "Find new ideas" for the content plan, based on this analysis. */
+  contentIdeas(queryId: string, signal?: AbortSignal): Promise<ContentIdea[]>;
+  addIdeaToPlan(queryId: string, config: string, signal?: AbortSignal): Promise<void>;
+}
+
+export interface Comment {
+  id: string;
+  text: string;
+  parent_id: string | null;
+}
+
+export interface InternalLink {
+  id: string;
+  text: string;
+  urls: string[];
+  cells: string[];
+}
+
+export interface ContentIdea {
+  text: string;
+  /** Opaque value nw_update_content_plan action "add_idea" sends back. */
+  config: string | null;
 }
 
 export interface PlagiarismResult {
@@ -82,11 +112,8 @@ export interface PlanningFeatures {
   addContentPlanIdea(projectId: string, keyword: string, additionalKeywords: string[], signal?: AbortSignal): Promise<void>;
   deleteContentPlanIdea(projectId: string, ideaId: string, signal?: AbortSignal): Promise<void>;
   updateContentPlanIdea(projectId: string, ideaId: string, field: 'assigned_to' | 'deadline', value: string, signal?: AbortSignal): Promise<void>;
-  /** Content management calendar: tasks, analyses and plan items with dates in [from, to). */
-  listCalendar(projectId: string, from: string, to: string, filters: { status?: string; assigned_to?: string }, signal?: AbortSignal): Promise<CalendarEntry[]>;
-  getTask(projectId: string, taskId: string, signal?: AbortSignal): Promise<Task>;
-  /** Creates (no task_id) or updates a task; on update every unspecified field keeps its value. */
-  saveTask(projectId: string, task: Partial<Task> & { title?: string }, signal?: AbortSignal): Promise<void>;
+  /** Content management calendar: analyses with a deadline and plan ideas with an expected date, in [from, to). */
+  listCalendar(projectId: string, from: string, to: string, filters: { assigned_to?: string }, signal?: AbortSignal): Promise<CalendarEntry[]>;
 }
 
 export interface CalendarEntry {
@@ -96,25 +123,6 @@ export interface CalendarEntry {
   start: string | null;
   end: string | null;
   status: string | null;
-}
-
-export const TASK_STATUSES = ['New', 'TODO', 'In progress', 'Done', 'Deleted'] as const;
-
-export interface Task {
-  task_id: string;
-  title: string;
-  keyword: string;
-  url: string;
-  analysis: string;
-  assigned_to: string;
-  start_date: string;
-  due_date: string;
-  status: string;
-  details: string;
-  cost: string;
-  supplemental_keywords: string;
-  tags: string;
-  groups: string;
 }
 
 export interface VisibilityFeatures {
