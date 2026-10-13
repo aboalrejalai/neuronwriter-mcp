@@ -119,8 +119,18 @@ export interface CreateQueryInput {
   additional_keywords?: string[];
 }
 
-export const AI_KINDS = ['outline', 'meta', 'intro', 'paragraph', 'faq', 'rephrase', 'expand', 'article'] as const;
+/** Writing kinds: NeuronWriter templates run on one analysis. */
+export const AI_TEMPLATE_KINDS = [
+  'outline', 'meta', 'intro', 'paragraph', 'faq', 'rephrase', 'expand', 'article', 'titles', 'product_description',
+  'category_description', 'product_reviews', 'content_plan_keywords', 'topical_map', 'youtube_description', 'email', 'synonyms',
+] as const;
+/** Other analysis-scoped AI actions. */
+export const AI_ANALYSIS_KINDS = ['prompt', 'insert_terms', 'ai_score', 'facts', 'internal_links', 'image_ideas', 'image', 'designer_article', 'custom'] as const;
+/** Project-scoped AI actions (AI Profile and AI Visibility). */
+export const AI_PROJECT_KINDS = ['ai_profile', 'suggest_brands', 'suggest_prompts', 'readiness_audit', 'earn_mention', 'earn_mention_rewrite'] as const;
+export const AI_KINDS = [...AI_TEMPLATE_KINDS, ...AI_ANALYSIS_KINDS, ...AI_PROJECT_KINDS] as const;
 export type AiKind = (typeof AI_KINDS)[number];
+export type AiTemplateKind = (typeof AI_TEMPLATE_KINDS)[number];
 export const AI_TONES = ['neutral', 'expert', 'formal', 'informal', 'witty', 'funny', 'serious', 'respectful', 'motivating'] as const;
 export const AI_MODELS = { default: 0, 'gpt-5': 2, claude: 3, gemini: 4 } as const;
 export type AiModel = keyof typeof AI_MODELS;
@@ -128,10 +138,35 @@ export type AiModel = keyof typeof AI_MODELS;
 export interface AiRequest {
   kind: AiKind;
   title?: string;
-  /** Text to rephrase/expand, or bullet points for intro/paragraph. */
+  /** Text to rephrase/expand/prompt over, or bullet points. */
   text?: string;
-  /** Heading of the paragraph to write. */
   heading?: string;
+  /** HTML the action works on (insert_terms, ai_score, internal_links, prompt, designer_article outline). */
+  html?: string;
+  description?: string;
+  /** Free instruction (kind "prompt"). */
+  prompt?: string;
+  keywords?: string[];
+  product_name?: string;
+  category_name?: string;
+  video_title?: string;
+  term?: string;
+  /** Competitor URLs or other sources (facts). */
+  sources?: string[];
+  custom_sources?: string;
+  idea?: string;
+  ratio?: '3:2' | '1:1' | '2:3';
+  style?: 'photograph' | 'cartoon' | 'painting' | 'sketch';
+  template_sig?: string;
+  fields?: Record<string, string>;
+  urls?: string[];
+  url?: string;
+  prompt_type?: 'all' | 'research' | 'consideration' | 'decision';
+  incentive?: string;
+  original_content?: string;
+  content_type?: 'article' | 'landing_page';
+  content_requirements?: string;
+  use_facts?: boolean;
   tone?: (typeof AI_TONES)[number];
   word_count?: number;
   model?: AiModel;
@@ -142,6 +177,8 @@ export interface AiResult {
   /** Meta title (kind "meta"; content is then the meta description). */
   title: string | null;
   usage: string | null;
+  /** Kind-specific structured output (ideas, brands, prompts, score, image bytes as base64…). */
+  data: Record<string, unknown> | null;
 }
 
 export interface PageContent {

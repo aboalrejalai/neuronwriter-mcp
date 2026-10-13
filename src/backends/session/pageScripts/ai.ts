@@ -14,6 +14,11 @@ export interface AiBodyArgs {
   wordCount: number;
   model: number;
   html: string;
+  /** "template" (default) or "ai-selection" (free prompt). */
+  mode?: string;
+  /** Extra template_params fields (product name, keywords, prompt…), applied last. */
+  fields?: Record<string, unknown>;
+  isCustom?: boolean;
 }
 
 /**
@@ -49,6 +54,19 @@ export function buildAiBody(args: AiBodyArgs): Record<string, unknown> {
       content: '',
     };
   }
+  if (args.template === 'content-designer-blog-article' || args.template === 'content-designer-landing-page') {
+    return {
+      wizard_mode: 'wizard-content',
+      ...common,
+      template_params: {
+        template: args.template, title, h1terms: h1, h2terms: h2, basicterms: basic, extendedterms: extended, entities,
+        toneofvoice: args.tone, addimages: false, use_bolds: true, rich_formatting: false, use_ai_overview: false,
+        contentlength: args.wordCount, content_requirements: String(args.fields?.content_requirements ?? ''),
+      },
+      use_ai_overview: false,
+      content: args.html,
+    };
+  }
   if (args.template === 'content-designer-meta-title-and-description') {
     return {
       wizard_mode: 'wizard-meta',
@@ -75,5 +93,31 @@ export function buildAiBody(args: AiBodyArgs): Record<string, unknown> {
   };
   if (args.template === 'intro-terms') Object.assign(fields, { keywordtitle: title, terms: basic, bulletpoints: args.text });
   if (args.template === 'paragraph-heading-terms') Object.assign(fields, { bulletpoints: args.text });
-  return { ...common, template_params: fields, prev_gen_id: '', suggested_output_len: args.wordCount, content: args.html };
+  if (!fields.terms) fields.terms = basic;
+  if (args.isCustom) fields.is_custom = true;
+  Object.assign(fields, args.fields ?? {});
+  if (!fields.keywords) fields.keywords = keyword;
+  const mode = args.mode ?? 'template';
+  // ai-selection sends the selected text as the request text; templates send ''.
+  return { ...common, mode, text: mode === 'ai-selection' ? args.text : '', template_params: fields, prev_gen_id: '', suggested_output_len: args.wordCount, content: args.html };
+}
+
+/** The analysis context the app attaches to term-aware AI calls (autoinsert, AI internal links, facts). */
+export function readAiContext(): Record<string, unknown> {
+  return {
+    project: PROJECT_SIG,
+    analysis: contadu_analysis_sig,
+    language: typeof analysis_language !== 'undefined' ? analysis_language : '',
+    content_terms: get_content_terms_to_check(),
+    custom_h1_terms: Object.values(typeof custom_h1_content_terms_by_id !== 'undefined' ? custom_h1_content_terms_by_id : {}),
+    custom_h2_terms: Object.values(typeof custom_h2_content_terms_by_id !== 'undefined' ? custom_h2_content_terms_by_id : {}),
+    custom_content_terms: Object.values(typeof custom_content_terms_by_id !== 'undefined' ? custom_content_terms_by_id : {}),
+    custom_terms_ranges: typeof custom_terms_ranges !== 'undefined' ? custom_terms_ranges : {},
+    terms_suggested_usage: typeof terms_suggested_usage !== 'undefined' ? terms_suggested_usage : {},
+  };
+}
+
+/** The user's saved AI templates (custom_ai_templates_definition). */
+export function readCustomTemplates(): unknown {
+  return typeof custom_ai_templates_definition !== 'undefined' ? custom_ai_templates_definition : {};
 }

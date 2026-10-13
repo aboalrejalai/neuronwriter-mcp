@@ -46,3 +46,4 @@ declare const text_content_terms_optional: string[] | undefined;
 declare const best_h1_terms: string[] | undefined;
 declare const best_h2_terms: string[] | undefined;
 declare const excluded_terms: string[] | undefined;
+declare const custom_ai_templates_definition: Record<string, unknown> | undefined;

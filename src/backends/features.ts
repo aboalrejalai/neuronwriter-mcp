@@ -53,9 +53,28 @@ export interface AnalysisPatch {
   distribution?: string;
 }
 
+export interface AiTarget {
+  /** Analysis id for analysis-scoped kinds. */
+  query?: string;
+  /** Project id for project-scoped kinds (ai_profile, AI Visibility). */
+  project?: string;
+}
+
+export interface CustomTemplate {
+  sig: string;
+  name: string;
+  prompt: string;
+  system_role: string;
+  notes: string;
+  fields: string[];
+}
+
 export interface AiFeatures {
   /** Spends AI credits. */
-  generate(queryId: string, request: AiRequest, signal?: AbortSignal): Promise<AiResult>;
+  generate(target: AiTarget, request: AiRequest, signal?: AbortSignal): Promise<AiResult>;
+  listTemplates(queryId: string, signal?: AbortSignal): Promise<CustomTemplate[]>;
+  saveTemplate(queryId: string, template: Omit<CustomTemplate, 'sig'> & { sig?: string }, signal?: AbortSignal): Promise<CustomTemplate[]>;
+  deleteTemplate(queryId: string, sig: string, signal?: AbortSignal): Promise<CustomTemplate[]>;
 }
 
 export interface PlanningFeatures {

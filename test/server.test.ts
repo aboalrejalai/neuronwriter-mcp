@@ -27,7 +27,12 @@ class FakeBackend implements Backend {
       updateTerms: async (_q, change) => void this.track(`updateTerms:${JSON.stringify(change)}`),
       updateAnalysis: async (_q, patch) => void this.track(`updateAnalysis:${Object.keys(patch).join(',')}`),
     },
-    ai: { generate: (q, req) => this.generateAi(q, req) },
+    ai: {
+      generate: (target, req) => this.generateAi(target.query ?? target.project ?? '', req),
+      listTemplates: async () => [],
+      saveTemplate: async (_q, t) => [{ ...t, sig: 'tpl1' }],
+      deleteTemplate: async () => [],
+    },
     planning: {
       listContentPlan: () => this.listContentPlan(),
       addContentPlanIdea: (p, k, a) => this.addContentPlanIdea(p, k, a),
@@ -88,7 +93,10 @@ class FakeBackend implements Backend {
   }
   async generateAi(_q: string, request: AiRequest): Promise<AiResult> {
     this.track(`generateAi:${request.kind}`);
-    return { content: '<h2>…</h2>', title: request.kind === 'meta' ? 'عنوان' : null, usage: '120 AI credits used' };
+    return {
+      content: '<h2>…</h2>', title: request.kind === 'meta' ? 'عنوان' : null, usage: '120 AI credits used',
+      data: request.kind === 'image' ? { format: 'png', base64: Buffer.from('png').toString('base64') } : null,
+    };
   }
   async setTags(_p: string, queryId: string, tags: string[]): Promise<void> {
     this.track(`setTags:${tags.join('|')}`);
@@ -349,6 +357,20 @@ describe('errors and safety', () => {
     expect(backend.calls).toEqual([]);
     const confirmed = await call('nw_generate_ai', { query: 'c1f8fbd2b38960d3', kind: 'meta', confirm: true });
     expect(confirmed.structuredContent).toMatchObject({ kind: 'meta', title: 'عنوان', usage: '120 AI credits used' });
+  });
+
+  it('checks scope and required inputs per kind before spending', async () => {
+    expect(text(await call('nw_generate_ai', { kind: 'meta', confirm: true }))).toContain('works on an analysis');
+    expect(text(await call('nw_generate_ai', { kind: 'suggest_brands', query: 'c1f8fbd2b38960d3', confirm: true }))).toContain('works on a project');
+    expect(text(await call('nw_generate_ai', { kind: 'product_description', query: 'c1f8fbd2b38960d3', confirm: true }))).toContain('needs product_name');
+    expect(text(await call('nw_generate_ai', { kind: 'insert_terms', query: 'c1f8fbd2b38960d3', html: '<p>x</p>' }))).toContain('2000');
+    expect(backend.calls).toEqual([]);
+  });
+
+  it('saves generated images as files', async () => {
+    process.env.NW_EXPORT_DIR = (await import('node:os')).tmpdir() + '/nw-test-images';
+    const result = await call('nw_generate_ai', { kind: 'image', query: 'c1f8fbd2b38960d3', idea: 'فيلا', title: 'test', confirm: true });
+    expect((result.structuredContent as { data: { path: string } }).data.path).toMatch(/nw-test-images\/test.*\.png$/);
   });
 
   it('requires text for rephrase before spending anything', async () => {
