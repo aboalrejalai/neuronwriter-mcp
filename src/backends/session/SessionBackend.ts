@@ -1,4 +1,4 @@
-import { NeuronWriterError } from '../../errors.js';
+import { NeuronWriterError, NwError } from '../../errors.js';
 import type { AccountStatus, Backend, ContentInput, ContentRevision, CreateQueryInput, Project, QuerySummary, Recommendations, Score } from '../Backend.js';
 import type { SessionFeatures } from '../features.js';
 import { PAGES } from './endpoints.js';
@@ -8,7 +8,7 @@ import { SessionPlanning } from './features/planning.js';
 import { SessionProjects } from './features/projects.js';
 import { SessionVisibility } from './features/visibility.js';
 import { SessionLookup } from './features/lookup.js';
-import { htmlToText, judgeTerms, normalizeAnalysisPage, normalizeQueryRows, normalizeScore, parseProfileText, pickRevision } from './normalize.js';
+import { htmlToText, judgeTerms, recentAutosave, normalizeAnalysisPage, normalizeQueryRows, normalizeScore, parseProfileText, pickRevision } from './normalize.js';
 import { buildCheckReadabilityBody, buildSaveContentBody, headingIdeasLoaded, readAnalysisPage, readAnalysisSig, readRevisions, readTermContext } from './pageScripts/analysis.js';
 import { readProjectsNav, readQueriesTable } from './pageScripts/project.js';
 import { SessionCore } from './SessionCore.js';
@@ -85,8 +85,17 @@ export class SessionBackend implements Backend {
     return { ...normalizeScore(response), terms: judgeTerms(await page.evaluate(readTermContext), response) };
   }
 
-  async importContent(queryId: string, input: ContentInput, signal?: AbortSignal): Promise<Score> {
+  async importContent(queryId: string, input: ContentInput, signal?: AbortSignal, options: { force?: boolean } = {}): Promise<Score> {
     const page = await this.core.openAnalysis(queryId, signal);
+    if (!options.force) {
+      const editing = recentAutosave((await page.evaluate(readRevisions)).revisions);
+      if (editing) {
+        throw new NwError(
+          `The article is open in the NeuronWriter editor (autosaved at ${editing} UTC). Saving now could be overwritten by the editor, or overwrite its changes.`,
+          'Ask the user to close the editor tab (or finish there), then retry; or pass force: true if they confirm it is safe.',
+        );
+      }
+    }
     const args = contentArgs(input);
     await this.core.post(page, 'saveOptimizedContent', await page.evaluate(buildSaveContentBody, args), signal);
     const response = await this.core.post(page, 'checkReadability', await page.evaluate(buildCheckReadabilityBody, args), signal);

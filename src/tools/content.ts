@@ -66,14 +66,19 @@ export function registerContentTools(server: McpServer, backend: Backend): void 
       title: 'Save an article into the NeuronWriter editor',
       description:
         'Saves title, meta description and HTML body as a new revision in the NeuronWriter editor of an analysis, then returns its score. ' +
-        'Earlier revisions stay available in NeuronWriter, but the editor will show this version. ' +
+        'Earlier revisions stay available in NeuronWriter, but the editor will show this version. If the article is open in the web editor right now (recent autosave), it refuses unless force: true. ' +
         'Use it once the content is final (check with nw_score_content first), and only for the analysis the article was written for. Spends nothing.',
-      inputSchema: z.strictObject({ query: queryId, ...contentFields, term_detail: termDetail }),
+      inputSchema: z.strictObject({
+        query: queryId,
+        ...contentFields,
+        term_detail: termDetail,
+        force: z.boolean().default(false).describe('Save even if the article looks open in the web editor (recent autosave). Only after the user confirms.'),
+      }),
       outputSchema: z.object({ ...scoreShape, url: z.string() }),
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
     handle(async (args, extra) => {
-      const score = await backend.importContent(args.query, args, extra.signal);
+      const score = await backend.importContent(args.query, args, extra.signal, { force: args.force });
       return ok(`Saved. Content score ${score.content_score ?? '?'}. Open ${analysisUrl(args.query)} to see it.`, { ...score, terms: shapeTerms(score.terms, args.term_detail), url: analysisUrl(args.query) });
     }),
   );

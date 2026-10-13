@@ -239,8 +239,8 @@ export interface Backend {
   getRecommendations(queryId: string, signal?: AbortSignal): Promise<Recommendations>;
   getContent(queryId: string, signal?: AbortSignal): Promise<ContentRevision>;
   scoreContent(queryId: string, input: ContentInput, signal?: AbortSignal): Promise<Score>;
-  /** Saves the content as a new revision and returns its score. */
-  importContent(queryId: string, input: ContentInput, signal?: AbortSignal): Promise<Score>;
+  /** Saves the content as a new revision and returns its score. `force` skips the open-editor check. */
+  importContent(queryId: string, input: ContentInput, signal?: AbortSignal, options?: { force?: boolean }): Promise<Score>;
   /** Spends 1 Content Writer analysis. Returns the new query id once it is listed. */
   createQuery(input: CreateQueryInput, signal?: AbortSignal): Promise<{ query_id: string | null }>;
   close(): Promise<void>;

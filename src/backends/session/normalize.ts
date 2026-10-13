@@ -321,3 +321,16 @@ export function judgeTerms(ctx: RawTermContext, response: Record<string, unknown
   }
   return { body, placement };
 }
+
+/**
+ * The editor autosaves only while it is open. A newest revision that is an
+ * autosave from the last few minutes means someone is editing right now.
+ * Revision labels are server time (UTC), e.g. "[autosave] 2026-10-13 10:28".
+ */
+export function recentAutosave(revisions: unknown, now = Date.now(), windowMs = 5 * 60_000): string | null {
+  if (!Array.isArray(revisions) || !revisions.length) return null;
+  const label = String((revisions[0] as unknown[])[1] ?? '');
+  if (!label.startsWith('[autosave]')) return null;
+  const at = Date.parse(`${label.replace('[autosave] ', '').trim().replace(' ', 'T')}Z`);
+  return Number.isFinite(at) && now - at < windowMs ? label.replace('[autosave] ', '') : null;
+}

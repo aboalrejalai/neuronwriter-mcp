@@ -194,3 +194,14 @@ describe('session: per-term verdict', () => {
     expect(long.body[1].status).toBe('ok');
   });
 });
+
+describe('session: open-editor guard', () => {
+  it('flags a fresh autosave as the newest revision only', async () => {
+    const { recentAutosave } = await import('../src/backends/session/normalize.js');
+    const now = Date.parse('2026-10-13T10:30:00Z');
+    expect(recentAutosave([['a', '[autosave] 2026-10-13 10:28', '']], now)).toBe('2026-10-13 10:28');
+    expect(recentAutosave([['a', '[autosave] 2026-10-13 10:10', '']], now)).toBeNull();
+    expect(recentAutosave([['a', '2026-10-13 10:29', ''], ['b', '[autosave] 2026-10-13 10:28', '']], now)).toBeNull();
+    expect(recentAutosave([], now)).toBeNull();
+  });
+});
