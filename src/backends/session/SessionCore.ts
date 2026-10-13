@@ -24,6 +24,15 @@ export class SessionCore {
 
   /** Navigates (as a paced read) and fails fast if the session is gone. */
   async open(path: string, signal?: AbortSignal): Promise<Page> {
+    const release = this.browser.hold();
+    try {
+      return await this.navigate(path, signal);
+    } finally {
+      release();
+    }
+  }
+
+  private async navigate(path: string, signal?: AbortSignal): Promise<Page> {
     const page = await this.browser.getPage();
     await this.limiter.run('read', async () => {
       const response = await page.goto(`${APP_URL}${path}`, { waitUntil: 'domcontentloaded', timeout: NAVIGATION_TIMEOUT_MS });
@@ -44,7 +53,16 @@ export class SessionCore {
   }
 
   /** Sends one endpoint's request from the page. Only reads are retried: a repeated write could save or spend twice. */
-  post(page: Page, name: EndpointName, body: unknown, signal?: AbortSignal, timeoutMs = NAVIGATION_TIMEOUT_MS): Promise<Record<string, unknown>> {
+  async post(page: Page, name: EndpointName, body: unknown, signal?: AbortSignal, timeoutMs = NAVIGATION_TIMEOUT_MS): Promise<Record<string, unknown>> {
+    const release = this.browser.hold();
+    try {
+      return await this.send(page, name, body, signal, timeoutMs);
+    } finally {
+      release();
+    }
+  }
+
+  private send(page: Page, name: EndpointName, body: unknown, signal?: AbortSignal, timeoutMs = NAVIGATION_TIMEOUT_MS): Promise<Record<string, unknown>> {
     const endpoint = ENDPOINTS[name];
     const encoding: 'json' | 'form' | 'get' = (endpoint as Endpoint).encoding ?? 'json';
     return this.limiter.run(endpoint.kind, async () => {

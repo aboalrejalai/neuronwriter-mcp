@@ -16,7 +16,7 @@ export function registerLookupTools(server: McpServer, backend: Backend): void {
       inputSchema: z.strictObject({
         project: projectId,
         action: z.enum(['locations', 'url_keywords', 'suggest_target_url', 'hub_pages']),
-        query: z.string().min(2).max(100).optional().describe('locations: city name, e.g. "Buraidah" or "بريدة".'),
+        query: z.string().min(2).max(100).optional().describe('locations: English city name as Google spells it, e.g. "Buraydah" (Arabic names return nothing).'),
         engine: z.string().max(40).default('google.com.sa').describe('locations: Google domain.'),
         url: z.string().url().optional().describe('url_keywords, hub_pages'),
         keyword: z.string().max(200).optional().describe('suggest_target_url'),

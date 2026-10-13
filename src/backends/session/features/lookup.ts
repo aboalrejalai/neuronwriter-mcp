@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { NeuronWriterError } from '../../../errors.js';
 import type { LookupFeatures } from '../../features.js';
 import { PAGES } from '../endpoints.js';
+import { LONG_TIMEOUT_MS } from '../SessionCore.js';
 import type { SessionCore } from '../SessionCore.js';
 import { parseHtmlRows } from '../pageScripts/common.js';
 
@@ -19,13 +20,14 @@ export class SessionLookup implements LookupFeatures {
     const page = await this.core.open(PAGES.project(projectId), signal);
     const data = await this.core.post(page, 'urlTopKeywords', { target_url: url, project: projectId }, signal);
     if (!data.keywords_table) throw new NeuronWriterError('No Search Console data for this URL.', 'Connect Google Search Console to the project in NeuronWriter (project menu → Search Console), then retry.');
-    const rows = await page.evaluate(parseHtmlRows, { html: String(data.keywords_table), selector: 'tbody tr' });
+    const rows = (await page.evaluate(parseHtmlRows, { html: String(data.keywords_table), selector: 'tbody tr' })).filter((r) => r.cells.length > 1);
+    if (!rows.length) throw new NeuronWriterError('No Search Console keywords for this URL.', 'Connect Google Search Console to the project in NeuronWriter (project menu → Search Console); new pages need a few days of data.');
     return rows.map((r) => ({ text: r.text, cells: r.cells }));
   }
 
   async suggestTargetUrl(projectId: string, keyword: string, signal?: AbortSignal) {
     const page = await this.core.open(PAGES.project(projectId), signal);
-    const data = await this.core.post(page, 'suggestTargetUrl', { project: projectId, keyword, mode: 'analysis' }, signal);
+    const data = await this.core.post(page, 'suggestTargetUrl', { project: projectId, keyword, mode: 'analysis' }, signal, LONG_TIMEOUT_MS);
     const rows = await page.evaluate(parseHtmlRows, { html: String(data.content_options ?? ''), selector: 'option, li, tr' });
     return [...new Set(rows.flatMap((r) => (r.links.length ? r.links : [r.text])).filter((t) => /^https?:\/\//.test(t)))];
   }

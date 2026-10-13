@@ -37,3 +37,25 @@ describe('profile lock', () => {
     expect(calls).toBe(1);
   });
 });
+
+describe('idle close', () => {
+  it('never closes while an operation holds the browser', async () => {
+    const { BrowserSession } = await import('../src/backends/session/browser.js');
+    const session = new BrowserSession('/nonexistent');
+    let closed = 0;
+    session.close = async () => void closed++;
+    const realSetTimeout = globalThis.setTimeout;
+    const timers: Array<() => void> = [];
+    (globalThis as { setTimeout: unknown }).setTimeout = ((fn: () => void) => ({ unref() {}, fn: timers.push(fn) })) as unknown;
+    try {
+      const release = session.hold();
+      expect(timers).toHaveLength(0); // no idle timer while busy
+      release();
+      expect(timers).toHaveLength(1); // idle timer starts once free
+      timers[0]();
+      expect(closed).toBe(1);
+    } finally {
+      globalThis.setTimeout = realSetTimeout;
+    }
+  });
+});

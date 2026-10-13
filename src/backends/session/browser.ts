@@ -75,6 +75,7 @@ export class BrowserSession {
   private context: BrowserContext | null = null;
   private page: Promise<Page> | null = null;
   private idleTimer: NodeJS.Timeout | null = null;
+  private busy = 0;
 
   constructor(private readonly dir = profileDir()) {}
 
@@ -109,8 +110,27 @@ export class BrowserSession {
     return context.pages()[0] ?? context.newPage();
   }
 
+  /**
+   * Marks the browser busy for the length of one operation: the idle timer
+   * only runs while nothing is in flight (a slow AI call can take minutes).
+   */
+  hold(): () => void {
+    this.busy++;
+    if (this.idleTimer) clearTimeout(this.idleTimer);
+    this.idleTimer = null;
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      this.busy--;
+      if (this.busy === 0) this.touch();
+    };
+  }
+
   private touch(): void {
     if (this.idleTimer) clearTimeout(this.idleTimer);
+    this.idleTimer = null;
+    if (this.busy > 0) return;
     this.idleTimer = setTimeout(() => void this.close(), IDLE_CLOSE_MS);
     this.idleTimer.unref();
   }
