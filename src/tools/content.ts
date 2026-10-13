@@ -1,7 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { analysisUrl, type Backend } from '../backends/Backend.js';
-import { READ_ONLY, contentFields, handle, ok, queryId, scoreShape, requireSession } from './shared.js';
+import { READ_ONLY, contentFields, handle, ok, queryId, scoreShape, shapeTerms, termDetail, requireSession } from './shared.js';
 
 export function registerContentTools(server: McpServer, backend: Backend): void {
   server.registerTool(
@@ -45,15 +45,18 @@ export function registerContentTools(server: McpServer, backend: Backend): void 
       title: 'Score an article without saving it',
       description:
         'Scores HTML content against an analysis exactly like the NeuronWriter editor does (content score 0-100, word count, readability) without saving anything. ' +
-        'Use it in a loop while writing: score, fix the terms that are under or over their ranges from nw_get_recommendations, score again. ' +
+        'It also returns the editor\'s per-term verdict (missing, use more, use less) and which title/H1/H2/description terms are absent, so you know exactly what to fix. ' +
+        'Use it in a loop while writing: score, fix the listed terms, score again. ' +
         'Aim to beat the best competitor score. Save the final version with nw_import_content. Spends nothing.',
-      inputSchema: z.strictObject({ query: queryId, ...contentFields }),
+      inputSchema: z.strictObject({ query: queryId, ...contentFields, term_detail: termDetail }),
       outputSchema: z.object(scoreShape),
       annotations: READ_ONLY,
     },
     handle(async (args, extra) => {
       const score = await backend.scoreContent(args.query, args, extra.signal);
-      return ok(`Content score ${score.content_score ?? '?'}, ${score.word_count ?? '?'} words, readability ${score.readability ?? '?'}.`, { ...score });
+      const terms = shapeTerms(score.terms, args.term_detail);
+      const gaps = terms ? ` ${terms.body.length} term(s) to fix, ${terms.placement.length} heading/meta placement(s) missing.` : '';
+      return ok(`Content score ${score.content_score ?? '?'}, ${score.word_count ?? '?'} words, readability ${score.readability ?? '?'}.${gaps}`, { ...score, terms });
     }),
   );
 
@@ -65,13 +68,13 @@ export function registerContentTools(server: McpServer, backend: Backend): void 
         'Saves title, meta description and HTML body as a new revision in the NeuronWriter editor of an analysis, then returns its score. ' +
         'Earlier revisions stay available in NeuronWriter, but the editor will show this version. ' +
         'Use it once the content is final (check with nw_score_content first), and only for the analysis the article was written for. Spends nothing.',
-      inputSchema: z.strictObject({ query: queryId, ...contentFields }),
+      inputSchema: z.strictObject({ query: queryId, ...contentFields, term_detail: termDetail }),
       outputSchema: z.object({ ...scoreShape, url: z.string() }),
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
     handle(async (args, extra) => {
       const score = await backend.importContent(args.query, args, extra.signal);
-      return ok(`Saved. Content score ${score.content_score ?? '?'}. Open ${analysisUrl(args.query)} to see it.`, { ...score, url: analysisUrl(args.query) });
+      return ok(`Saved. Content score ${score.content_score ?? '?'}. Open ${analysisUrl(args.query)} to see it.`, { ...score, terms: shapeTerms(score.terms, args.term_detail), url: analysisUrl(args.query) });
     }),
   );
 
@@ -107,6 +110,7 @@ export function registerPageTools(server: McpServer, backend: Backend): void {
         query: queryId.describe('Analysis to score against (the page is fetched through it).'),
         url: z.string().url().max(2000),
         score: z.boolean().default(true),
+        term_detail: termDetail,
         max_chars: z.number().int().min(1_000).max(400_000).default(40_000),
       }),
       outputSchema: z.object({
@@ -129,7 +133,7 @@ export function registerPageTools(server: McpServer, backend: Backend): void {
         html: truncated ? page.html.slice(0, args.max_chars) : page.html,
         html_length: page.html.length,
         truncated,
-        score,
+        score: score ? { ...score, terms: shapeTerms(score.terms, args.term_detail) } : null,
       });
     }),
   );

@@ -67,6 +67,12 @@ export interface Recommendations {
     h1: string[];
     h2: string[];
     entities: string[];
+    /** Terms the user excluded from this analysis. */
+    excluded: string[];
+    /** The user's own terms, by where they count. */
+    custom: { text: string[]; h1: string[]; h2: string[] };
+    /** Ranges the user overrode: term → [min, max]. */
+    custom_ranges: Record<string, [number, number]>;
   };
   ideas: { headings: string[]; questions: string[] };
   competitors: Competitor[];
@@ -87,11 +93,22 @@ export interface ContentInput {
   description?: string;
 }
 
+export type TermStatus = 'missing' | 'use_more' | 'ok' | 'use_less' | 'use_much_less';
+
+export interface TermUsage {
+  /** Body terms with the editor's own verdict per term. */
+  body: Array<{ term: string; group: 'basic' | 'extended'; uses: number; min: number | null; max: number | null; status: TermStatus }>;
+  /** Title/description/H1/H2 terms: whether each appears there. */
+  placement: Array<{ term: string; section: 'title' | 'description' | 'h1' | 'h2'; used: boolean }>;
+}
+
 export interface Score {
   content_score: number | null;
   word_count: number | null;
   readability: number | null;
   details: Record<string, unknown> | null;
+  /** Per-term usage, the way the editor's sidebar shows it (session backend). */
+  terms?: TermUsage | null;
 }
 
 export interface CreateQueryInput {

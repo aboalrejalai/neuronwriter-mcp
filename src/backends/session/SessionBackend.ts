@@ -6,8 +6,8 @@ import { SessionAi } from './features/ai.js';
 import { SessionAnalysis } from './features/analysis.js';
 import { SessionPlanning } from './features/planning.js';
 import { SessionProjects } from './features/projects.js';
-import { normalizeAnalysisPage, normalizeQueryRows, normalizeScore, parseProfileText, pickRevision } from './normalize.js';
-import { buildCheckReadabilityBody, buildSaveContentBody, headingIdeasLoaded, readAnalysisPage, readAnalysisSig, readRevisions } from './pageScripts/analysis.js';
+import { judgeTerms, normalizeAnalysisPage, normalizeQueryRows, normalizeScore, parseProfileText, pickRevision } from './normalize.js';
+import { buildCheckReadabilityBody, buildSaveContentBody, headingIdeasLoaded, readAnalysisPage, readAnalysisSig, readRevisions, readTermContext } from './pageScripts/analysis.js';
 import { readProjectsNav, readQueriesTable } from './pageScripts/project.js';
 import { SessionCore } from './SessionCore.js';
 
@@ -77,14 +77,16 @@ export class SessionBackend implements Backend {
   async scoreContent(queryId: string, input: ContentInput, signal?: AbortSignal): Promise<Score> {
     const page = await this.core.openAnalysis(queryId, signal);
     const body = await page.evaluate(buildCheckReadabilityBody, contentArgs(input));
-    return normalizeScore(await this.core.post(page, 'checkReadability', body, signal));
+    const response = await this.core.post(page, 'checkReadability', body, signal);
+    return { ...normalizeScore(response), terms: judgeTerms(await page.evaluate(readTermContext), response) };
   }
 
   async importContent(queryId: string, input: ContentInput, signal?: AbortSignal): Promise<Score> {
     const page = await this.core.openAnalysis(queryId, signal);
     const args = contentArgs(input);
     await this.core.post(page, 'saveOptimizedContent', await page.evaluate(buildSaveContentBody, args), signal);
-    return normalizeScore(await this.core.post(page, 'checkReadability', await page.evaluate(buildCheckReadabilityBody, args), signal));
+    const response = await this.core.post(page, 'checkReadability', await page.evaluate(buildCheckReadabilityBody, args), signal);
+    return { ...normalizeScore(response), terms: judgeTerms(await page.evaluate(readTermContext), response) };
   }
 
   async createQuery(input: CreateQueryInput, signal?: AbortSignal): Promise<{ query_id: string | null }> {

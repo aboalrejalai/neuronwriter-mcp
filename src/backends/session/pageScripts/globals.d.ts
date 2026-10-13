@@ -38,3 +38,11 @@ declare const AI_TEMPERATURE_LEVELS: Record<number, number> | undefined;
 declare function join_text_list_w_limit(list: unknown, limit: number, delimiter: string): string;
 declare function get_meta_title_examples(count: number, sliceAt: number): string;
 declare function get_meta_desc_examples(count: number, sliceAt: number): string;
+
+/* Term judgement globals (editor_t.js finish_update_readability, recorded 2026-10-13). */
+declare const terms_suggested_usage: Record<string, [number, number]> | undefined;
+declare const text_content_terms_must_have: string[] | undefined;
+declare const text_content_terms_optional: string[] | undefined;
+declare const best_h1_terms: string[] | undefined;
+declare const best_h2_terms: string[] | undefined;
+declare const excluded_terms: string[] | undefined;

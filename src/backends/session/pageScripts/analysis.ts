@@ -19,6 +19,9 @@ export interface RawAnalysisPage {
   competitorTitles: unknown;
   competitorScores: unknown;
   competitorWords: unknown;
+  excluded: unknown;
+  custom: { text: unknown; h1: unknown; h2: unknown };
+  customRanges: unknown;
   /** Server-rendered "Structure ideas → Questions" list. */
   questions: string[];
   /** Server-rendered "Structure ideas → Headings": per competitor URL, its H1-H3 headings in order. */
@@ -54,6 +57,13 @@ export function readAnalysisPage(): RawAnalysisPage {
     competitorTitles: typeof meta_titles !== 'undefined' ? meta_titles : null,
     competitorScores: datasets['content-score'] ?? null,
     competitorWords: datasets['content-length-words'] ?? null,
+    excluded: typeof excluded_terms !== 'undefined' ? excluded_terms : [],
+    custom: {
+      text: Object.values(typeof custom_content_terms_by_id !== 'undefined' ? custom_content_terms_by_id : {}),
+      h1: Object.values(typeof custom_h1_content_terms_by_id !== 'undefined' ? custom_h1_content_terms_by_id : {}),
+      h2: Object.values(typeof custom_h2_content_terms_by_id !== 'undefined' ? custom_h2_content_terms_by_id : {}),
+    },
+    customRanges: typeof custom_terms_ranges !== 'undefined' ? custom_terms_ranges : {},
     questions: [...document.querySelectorAll('#outline-questions li.content-draft-idea-question[data-idea-title]')].map(
       (li) => li.getAttribute('data-idea-title') ?? '',
     ),
@@ -168,4 +178,53 @@ export function readCompetitorSwitches(): Array<{ url: string; selected: boolean
     selected: (input as HTMLInputElement).checked,
     top10: input.classList.contains('comp-top10'),
   }));
+}
+
+export interface RawTermContext {
+  ranges: Record<string, unknown>;
+  customRanges: Record<string, unknown>;
+  basic: string[];
+  extended: string[];
+  title: unknown;
+  description: unknown;
+  h1: unknown;
+  h2: unknown;
+  competitorsAvgWords: number | null;
+}
+
+/** Everything the editor uses to judge each term (finish_update_readability). */
+export function readTermContext(): RawTermContext {
+  return {
+    ranges: typeof terms_suggested_usage !== 'undefined' ? terms_suggested_usage : {},
+    customRanges: typeof custom_terms_ranges !== 'undefined' ? custom_terms_ranges : {},
+    basic: typeof text_content_terms_must_have !== 'undefined' ? text_content_terms_must_have : [],
+    extended: typeof text_content_terms_optional !== 'undefined' ? text_content_terms_optional : [],
+    title: get_title_terms('text'),
+    description: get_description_terms('text'),
+    h1: typeof best_h1_terms !== 'undefined' ? best_h1_terms : [],
+    h2: typeof best_h2_terms !== 'undefined' ? best_h2_terms : [],
+    competitorsAvgWords: typeof competitors_avg_word_count !== 'undefined' ? competitors_avg_word_count : null,
+  };
+}
+
+export function readProjectSig(): string | null {
+  return typeof PROJECT_SIG !== 'undefined' ? PROJECT_SIG : null;
+}
+
+/** True for NeuronWriter's own recommended terms, false for the user's custom terms. */
+export function isContaduTerm(term: string): boolean {
+  return typeof content_terms !== 'undefined' && content_terms !== null && term in content_terms;
+}
+
+/** The editor's get_minimal_html(): only the tags NeuronWriter keeps in exports. */
+export function minimalHtml(html: string): string {
+  return html
+    .replace(/<\/?div\b([^>]*)>/g, (m, attrs) => (m.startsWith('</') ? '</p>' : `<p${attrs}>`))
+    .replace(/<\/?(?!strong)(?!b)(?!i)(?!strike)(?!ol)(?!ul)(?!li)(?!a)(?!p)(?!img)(?!h1)(?!h2)(?!h3)(?!h4)(?!h5)(?!h6)(?!br)(?!table)(?!thead)(?!tbody)(?!tfoot)(?!th)(?!tr)(?!td)(?!colgroup)(?!col)\w*\b[^>]*>/gi, '');
+}
+
+export function htmlText(html: string): string {
+  const holder = document.createElement('div');
+  holder.innerHTML = html.replace(/<\/(p|h[1-6]|li|div|blockquote|tr|td|th)>|<br\s*\/?>/gi, '$&\n');
+  return (holder.textContent ?? '').trim();
 }

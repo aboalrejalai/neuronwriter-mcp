@@ -1,7 +1,7 @@
 import type { CallToolResult, ServerNotification, ServerRequest, ToolAnnotations } from '@modelcontextprotocol/sdk/types.js';
 import type { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import { z } from 'zod';
-import type { Backend } from '../backends/Backend.js';
+import type { Backend, TermUsage } from '../backends/Backend.js';
 import type { SessionFeatures } from '../backends/features.js';
 import { NotSupportedError, NwError } from '../errors.js';
 import { log } from '../log.js';
@@ -29,12 +29,41 @@ export const contentFields = {
   description: z.string().max(2_000).optional().describe('Meta description.'),
 };
 
+const termStatus = z.enum(['missing', 'use_more', 'ok', 'use_less', 'use_much_less']);
+
 export const scoreShape = {
   content_score: z.number().nullable().describe('NeuronWriter content score, 0-100.'),
   word_count: z.number().nullable(),
   readability: z.number().nullable(),
   details: z.record(z.string(), z.unknown()).nullable().describe('Score breakdown as NeuronWriter returns it.'),
+  terms: z
+    .object({
+      body: z.array(z.object({ term: z.string(), group: z.enum(['basic', 'extended']), uses: z.number(), min: z.number().nullable(), max: z.number().nullable(), status: termStatus })),
+      placement: z.array(z.object({ term: z.string(), section: z.enum(['title', 'description', 'h1', 'h2']), used: z.boolean() })),
+      ok_count: z.number().describe('Body terms already inside their range (left out when term_detail is "gaps").'),
+    })
+    .nullable()
+    .optional()
+    .describe('Per-term verdict like the editor sidebar: missing / use_more / use_less / use_much_less, and title/description/H1/H2 placement.'),
 };
+
+export const termDetail = z
+  .enum(['gaps', 'all', 'none'])
+  .default('gaps')
+  .describe('"gaps" (default) returns only terms to fix; "all" every term; "none" leaves the per-term list out.');
+
+const ORDER: Record<string, number> = { missing: 0, use_more: 1, use_much_less: 2, use_less: 3, ok: 4 };
+
+/** Trims the per-term verdict to what the agent should act on. */
+export function shapeTerms(terms: TermUsage | null | undefined, detail: 'gaps' | 'all' | 'none') {
+  if (!terms || detail === 'none') return null;
+  const okCount = terms.body.filter((t) => t.status === 'ok').length;
+  const body = [...terms.body]
+    .filter((t) => detail === 'all' || t.status !== 'ok')
+    .sort((a, b) => (a.group === b.group ? 0 : a.group === 'basic' ? -1 : 1) || ORDER[a.status] - ORDER[b.status]);
+  const placement = terms.placement.filter((p) => detail === 'all' || !p.used);
+  return { body, placement, ok_count: okCount };
+}
 
 /** Reads: never change anything in NeuronWriter. */
 export const READ_ONLY: ToolAnnotations = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true };

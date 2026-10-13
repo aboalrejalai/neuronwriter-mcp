@@ -3,8 +3,8 @@
 
 import { NeuronWriterError, PlanLimitError, RetryableError, SessionExpiredError, isPlanLimitMessage } from '../../errors.js';
 import { sanitizeExternalText } from '../../sanitize.js';
-import { analysisUrl, type AccountStatus, type Competitor, type ContentPlanIdea, type ProjectSettings, type ProjectSettingsPatch, type QuerySummary, type Recommendations, type Score, type TermRange, type Usage } from '../Backend.js';
-import type { RawAnalysisPage } from './pageScripts/analysis.js';
+import { analysisUrl, type TermStatus, type TermUsage, type AccountStatus, type Competitor, type ContentPlanIdea, type ProjectSettings, type ProjectSettingsPatch, type QuerySummary, type Recommendations, type Score, type TermRange, type Usage } from '../Backend.js';
+import type { RawAnalysisPage, RawTermContext } from './pageScripts/analysis.js';
 import type { InPageResponse } from './pageScripts/common.js';
 import type { RawContentPlanIdea, RawQueryRow } from './pageScripts/project.js';
 
@@ -16,6 +16,22 @@ const toNumber = (value: unknown): number | null => {
 
 const stringList = (value: unknown): string[] =>
   Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string' && v.trim() !== '') : [];
+
+/** Custom term lists hold strings or {term,…} objects depending on how they were added. */
+const termNames = (value: unknown): string[] =>
+  Array.isArray(value)
+    ? value.map((v) => (typeof v === 'string' ? v : (v as { term?: string; name?: string })?.term ?? (v as { name?: string })?.name ?? '')).filter(Boolean)
+    : [];
+
+const customRanges = (value: unknown): Record<string, [number, number]> => {
+  const out: Record<string, [number, number]> = {};
+  if (value && typeof value === 'object') {
+    for (const [term, range] of Object.entries(value as Record<string, unknown>)) {
+      if (Array.isArray(range) && range.length >= 2) out[term] = [Number(range[0]), Number(range[1])];
+    }
+  }
+  return out;
+};
 
 /** [{ "term": { min, max } }, …] → [{ term, min, max }] */
 export function toTermRanges(value: unknown): TermRange[] {
@@ -76,6 +92,9 @@ export function normalizeAnalysisPage(queryId: string, raw: RawAnalysisPage): Re
       h1: stringList(raw.h1),
       h2: stringList(raw.h2),
       entities: stringList(raw.entities),
+      excluded: stringList(raw.excluded),
+      custom: { text: termNames(raw.custom?.text), h1: termNames(raw.custom?.h1), h2: termNames(raw.custom?.h2) },
+      custom_ranges: customRanges(raw.customRanges),
     },
     ideas: {
       headings: headingIdeas.map((h) => sanitizeExternalText(h)).filter((h): h is string => h !== null),
@@ -263,4 +282,42 @@ export function applySettingsPatch(form: Record<string, unknown>, keywords: Reco
   if (ai.personas !== undefined) body.ai_overview_labeling_personas = ai.personas;
   if (ai.brand_voice !== undefined) body.ai_overview_brand_voice = ai.brand_voice;
   return body;
+}
+
+const rangeOf = (value: unknown): [number | null, number | null] =>
+  Array.isArray(value) ? [toNumber(value[0]), toNumber(value[1])] : [null, null];
+
+/**
+ * The editor's per-term verdict (editor_t.js finish_update_readability):
+ * fewer than min → use more; above multiplier×(max+1) → use less, twice that → use much less.
+ * The multiplier is the text's word count over the competitors' average, when longer, capped at 10.
+ */
+export function judgeTerms(ctx: RawTermContext, response: Record<string, unknown>): TermUsage {
+  const matched = (response.keywords_matched ?? {}) as Record<string, unknown>;
+  const special = (response.keywords_matched_special ?? {}) as Record<string, unknown>;
+  const words = toNumber(response.word_count) ?? 0;
+  const avg = ctx.competitorsAvgWords ?? 0;
+  const multiplier = words > 0 && avg > 0 && words > avg ? Math.min(10, words / avg) : 1;
+  const body: TermUsage['body'] = [];
+  const judge = (term: string, group: 'basic' | 'extended') => {
+    const uses = toNumber(matched[term]) ?? 0;
+    const [min, max] = term in ctx.customRanges ? rangeOf(ctx.customRanges[term]) : rangeOf(ctx.ranges[term]);
+    let status: TermStatus = 'ok';
+    if (uses === 0) status = 'missing';
+    else if (min !== null && uses < min) status = 'use_more';
+    else if (max !== null && uses > 2 * multiplier * (max + 1)) status = 'use_much_less';
+    else if (max !== null && uses > multiplier * (max + 1)) status = 'use_less';
+    body.push({ term, group, uses, min, max, status });
+  };
+  ctx.basic.forEach((t) => judge(t, 'basic'));
+  ctx.extended.forEach((t) => judge(t, 'extended'));
+  const placement: TermUsage['placement'] = [];
+  const sections: Array<['title' | 'description' | 'h1' | 'h2', unknown]> = [['title', ctx.title], ['description', ctx.description], ['h1', ctx.h1], ['h2', ctx.h2]];
+  for (const [section, list] of sections) {
+    for (const term of stringList(list)) {
+      const where = special[term];
+      placement.push({ term, section, used: Array.isArray(where) ? where.includes(section) : false });
+    }
+  }
+  return { body, placement };
 }

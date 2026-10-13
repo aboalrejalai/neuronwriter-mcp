@@ -130,3 +130,12 @@ export function readContentPlan(): RawContentPlanIdea[] {
     };
   });
 }
+
+/** The project's "language|engine" targeting, as its search-volume refresh button sends it. */
+export function readVolumeTargeting(): string | null {
+  for (const el of document.querySelectorAll('[onclick*="request_search_volume_update"]')) {
+    const match = (el.getAttribute('onclick') ?? '').match(/request_search_volume_update\('([^']+)'\)/);
+    if (match) return match[1];
+  }
+  return null;
+}

@@ -162,3 +162,35 @@ describe('session: AI usage', () => {
     expect(parseAiUsage('<b>other</b> text')).toBe('other text');
   });
 });
+
+describe('session: per-term verdict', () => {
+  const ctx = {
+    ranges: { مكة: [10, 32], ديكور: [1, 5], فوم: [1, 2] },
+    customRanges: { فوم: [3, 4] },
+    basic: ['مكة', 'ديكور'],
+    extended: ['فوم', 'جبس'],
+    title: ['مكة'],
+    description: ['ديكورات'],
+    h1: ['مكة'],
+    h2: ['ديكور'],
+    competitorsAvgWords: 1000,
+  };
+  it('judges like the editor, custom ranges first, multiplier for long texts', async () => {
+    const { judgeTerms } = await import('../src/backends/session/normalize.js');
+    const usage = judgeTerms(ctx, { word_count: 1000, keywords_matched: { مكة: 4, ديكور: 13, فوم: 2 }, keywords_matched_special: { مكة: ['h1', 'title'] } });
+    expect(usage.body).toEqual([
+      { term: 'مكة', group: 'basic', uses: 4, min: 10, max: 32, status: 'use_more' },
+      { term: 'ديكور', group: 'basic', uses: 13, min: 1, max: 5, status: 'use_much_less' },
+      { term: 'فوم', group: 'extended', uses: 2, min: 3, max: 4, status: 'use_more' },
+      { term: 'جبس', group: 'extended', uses: 0, min: null, max: null, status: 'missing' },
+    ]);
+    expect(usage.placement).toEqual([
+      { term: 'مكة', section: 'title', used: true },
+      { term: 'ديكورات', section: 'description', used: false },
+      { term: 'مكة', section: 'h1', used: true },
+      { term: 'ديكور', section: 'h2', used: false },
+    ]);
+    const long = judgeTerms(ctx, { word_count: 3000, keywords_matched: { ديكور: 13 } });
+    expect(long.body[1].status).toBe('ok');
+  });
+});
