@@ -2,12 +2,15 @@ import { chmod, mkdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { chromium, type BrowserContext, type Page } from 'playwright';
+import { NwError } from '../../errors.js';
 import { log } from '../../log.js';
 import { APP_URL } from '../Backend.js';
 import { OWN_REQUEST_HEADER, PAGE_ALLOWED_READS } from './endpoints.js';
 
 export const DEFAULT_PROFILE_DIR = join(homedir(), '.neuronwriter-mcp', 'profile');
-const IDLE_CLOSE_MS = 10 * 60 * 1000;
+// Short, so another MCP process (a second Claude/Cursor session) can take the profile soon after.
+const IDLE_CLOSE_MS = 3 * 60 * 1000;
+const PROFILE_LOCK_WAIT_MS = 60_000;
 const BLOCKED_RESOURCES = new Set(['image', 'media', 'font', 'stylesheet']);
 
 export function profileDir(): string {
@@ -21,12 +24,44 @@ export async function ensureProfileDir(dir: string): Promise<void> {
 
 export async function launchContext(dir: string, headless: boolean): Promise<BrowserContext> {
   await ensureProfileDir(dir);
+  return launchWithLockRetry(() => launchOnce(dir, headless));
+}
+
+async function launchOnce(dir: string, headless: boolean): Promise<BrowserContext> {
   const options = { headless, viewport: { width: 1280, height: 900 } };
   try {
     return await chromium.launchPersistentContext(dir, { ...options, channel: 'chrome' });
   } catch (error) {
+    if (isProfileLocked(error)) throw error;
     log('Google Chrome not available, falling back to bundled Chromium:', (error as Error).message.split('\n')[0]);
     return chromium.launchPersistentContext(dir, options);
+  }
+}
+
+/** Chromium refuses a second process on the same profile ("Failed to create a ProcessSingleton"). */
+export function isProfileLocked(error: unknown): boolean {
+  return error instanceof Error && /ProcessSingleton|SingletonLock|profile is already in use/i.test(error.message);
+}
+
+/** Waits (with backoff) while another process holds the profile, then gives the agent a next step. */
+export async function launchWithLockRetry<T>(
+  launch: () => Promise<T>,
+  { waitMs = PROFILE_LOCK_WAIT_MS, sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms)), now = Date.now } = {},
+): Promise<T> {
+  const deadline = now() + waitMs;
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await launch();
+    } catch (error) {
+      if (!isProfileLocked(error)) throw error;
+      if (now() >= deadline) {
+        throw new NwError(
+          'Another NeuronWriter MCP session is using the browser profile.',
+          'Retry in a minute: the other Claude/Cursor session releases it after 3 idle minutes. If `npm run login` is open, finish or close it first.',
+        );
+      }
+      await sleep(Math.min(1000 * 2 ** attempt, 8000));
+    }
   }
 }
 

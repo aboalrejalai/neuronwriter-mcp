@@ -43,6 +43,8 @@ export class SessionProjects implements ProjectFeatures {
     if (result[0] !== 'success' || typeof result[1] !== 'string') {
       throw new NeuronWriterError(htmlToText(result[1]) ?? 'NeuronWriter did not create the project.', 'Read the message; check nw_status for free project slots.');
     }
+    // The wizard's project_keywords field does not persist (seen 2026-10-13); save them through settings.
+    if (input.keywords?.length) await this.updateSettings(result[1], { keywords: { desired: input.keywords } }, signal);
     return { project_id: result[1], homepage, engine, language };
   }
 
