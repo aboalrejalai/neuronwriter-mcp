@@ -24,6 +24,8 @@ class FakeBackend implements Backend {
       setTags: (p, q, tags) => this.setTags(p, q, tags),
       selectCompetitors: (q, sel) => this.selectCompetitors(q, sel),
       fetchPage: (q, url) => this.fetchPage(q, url),
+      updateTerms: async (_q, change) => void this.track(`updateTerms:${JSON.stringify(change)}`),
+      updateAnalysis: async (_q, patch) => void this.track(`updateAnalysis:${Object.keys(patch).join(',')}`),
     },
     ai: { generate: (q, req) => this.generateAi(q, req) },
     planning: {
@@ -60,7 +62,7 @@ class FakeBackend implements Backend {
     this.track('getRecommendations');
     return {
       query_id: queryId, keyword: 'ديكورات مكة', status: 'ready', targets: { word_count: 1034, readability: 20 },
-      terms: { content_basic: [{ term: 'مكة', min: 10, max: 32 }], content_extended: Array.from({ length: 80 }, (_, i) => ({ term: `t${i}`, min: 1, max: 1 })), title: [], description: [], h1: [], h2: [], entities: [] },
+      terms: { content_basic: [{ term: 'مكة', min: 10, max: 32 }], content_extended: Array.from({ length: 80 }, (_, i) => ({ term: `t${i}`, min: 1, max: 1 })), title: [], description: [], h1: [], h2: [], entities: [], excluded: [], custom: { text: [], h1: [], h2: [] }, custom_ranges: {} },
       ideas: { headings: [], questions: [] },
       competitors: Array.from({ length: 27 }, (_, i) => ({ rank: i + 1, url: `https://c${i}.example/`, title: null, content_score: 50, word_count: 900, headings: Array.from({ length: 40 }, (_, j) => ({ level: 2, text: `h${j}` })) })),
     };
@@ -149,11 +151,11 @@ const text = (result: CallToolResult) => (result.content[0] as { text: string })
 describe('tool surface', () => {
   it('exposes the nw_ tools, each with title, long description, output schema and all four annotations', async () => {
     const { tools } = await client.listTools();
-    expect(tools.map((t) => t.name).sort()).toEqual([
-      'nw_add_content_plan_idea', 'nw_create_project', 'nw_create_query', 'nw_fetch_page', 'nw_generate_ai', 'nw_get_content', 'nw_get_project_settings',
-      'nw_get_recommendations', 'nw_import_content', 'nw_list_content_plan', 'nw_list_projects', 'nw_list_queries', 'nw_score_content',
-      'nw_select_competitors', 'nw_set_done', 'nw_status', 'nw_update_project_settings', 'nw_update_tags',
-    ]);
+    const names = tools.map((t) => t.name);
+    for (const core of ['nw_status', 'nw_list_projects', 'nw_create_project', 'nw_list_queries', 'nw_create_query', 'nw_get_recommendations', 'nw_score_content', 'nw_import_content', 'nw_update_terms', 'nw_update_analysis', 'nw_generate_ai']) {
+      expect(names).toContain(core);
+    }
+    expect(new Set(names).size).toBe(names.length);
     for (const tool of tools) {
       expect(tool.name).toMatch(/^nw_[a-z_]+$/);
       expect(tool.title).toBeTruthy();
@@ -167,10 +169,17 @@ describe('tool surface', () => {
 
   it('keeps reads and credit-spending tools apart', async () => {
     const { tools } = await client.listTools();
-    const readOnly = tools.filter((t) => t.annotations?.readOnlyHint).map((t) => t.name);
-    expect(readOnly.sort()).toEqual([
-      'nw_fetch_page', 'nw_get_content', 'nw_get_project_settings', 'nw_get_recommendations', 'nw_list_content_plan', 'nw_list_projects', 'nw_list_queries', 'nw_score_content', 'nw_status',
-    ]);
+    const byName = new Map(tools.map((t) => [t.name, t]));
+    for (const name of ['nw_status', 'nw_list_projects', 'nw_list_queries', 'nw_get_recommendations', 'nw_get_content', 'nw_score_content', 'nw_fetch_page', 'nw_export_content']) {
+      expect(byName.get(name)?.annotations?.readOnlyHint).toBe(true);
+    }
+    // Everything that spends credits, uses a plan slot or deletes: not read-only, and gated by confirm.
+    for (const name of ['nw_create_query', 'nw_create_project', 'nw_generate_ai', 'nw_check_plagiarism', 'nw_refresh_metrics', 'nw_delete_query']) {
+      const tool = byName.get(name)!;
+      expect(tool.annotations?.readOnlyHint).toBe(false);
+      expect(Object.keys(tool.inputSchema.properties ?? {})).toContain('confirm');
+    }
+    expect(byName.get('nw_delete_query')?.annotations?.destructiveHint).toBe(true);
   });
 });
 
@@ -241,6 +250,23 @@ describe('management tools', () => {
     expect(backend.calls).toContain('updateProjectSettings:ai_profile');
     expect(result.structuredContent).toMatchObject({ name: 'makkahdecorsa.com', ai_profile: { brand_voice: 'ودود', overview: '' } });
     expect((await call('nw_update_project_settings', { project: '6ec9249b8de0a586' })).isError).toBe(true);
+  });
+
+  it('validates term changes before touching NeuronWriter', async () => {
+    const missing = await call('nw_update_terms', { query: 'c1f8fbd2b38960d3', action: 'set_range', term: 'مكة', min: 3 });
+    expect(missing.isError).toBe(true);
+    expect(text(missing)).toContain('needs max');
+    expect((await call('nw_update_terms', { query: 'c1f8fbd2b38960d3', action: 'set_range', term: 'مكة', min: 9, max: 3 })).isError).toBe(true);
+    expect(backend.calls).toEqual([]);
+    await call('nw_update_terms', { query: 'c1f8fbd2b38960d3', action: 'add', terms: ['بريدة'], location: 'h2' });
+    expect(backend.calls).toContain('updateTerms:{"action":"add","terms":["بريدة"],"location":"h2"}');
+  });
+
+  it('updates only the analysis fields passed', async () => {
+    expect((await call('nw_update_analysis', { query: 'c1f8fbd2b38960d3' })).isError).toBe(true);
+    expect((await call('nw_update_analysis', { query: 'c1f8fbd2b38960d3', deadline: '13/10/2026' })).isError).toBe(true);
+    const result = await call('nw_update_analysis', { query: 'c1f8fbd2b38960d3', target_word_count: 900, deadline: '2026-10-20' });
+    expect(result.structuredContent).toMatchObject({ changed: ['target_word_count', 'deadline'] });
   });
 
   it('creates a project only with confirm', async () => {

@@ -145,6 +145,9 @@ export function normalizeApiQuery(queryId: string, raw: Record<string, unknown>)
       h1: lines(txt.h1),
       h2: lines(txt.h2),
       entities: typeof txt.entities === 'string' ? txt.entities.split(',').map((e) => e.trim()).filter(Boolean) : [],
+      excluded: [],
+      custom: { text: [], h1: [], h2: [] },
+      custom_ranges: {},
     },
     ideas: { headings: [], questions: questions.map((q) => sanitizeExternalText(q)).filter((q): q is string => q !== null) },
     competitors: competitors.map((c, index) => ({

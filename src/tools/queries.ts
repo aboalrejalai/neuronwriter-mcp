@@ -102,6 +102,9 @@ export function registerQueryTools(server: McpServer, backend: Backend): void {
           h1: z.array(z.string()),
           h2: z.array(z.string()),
           entities: z.array(z.string()),
+          excluded: z.array(z.string()),
+          custom: z.object({ text: z.array(z.string()), h1: z.array(z.string()), h2: z.array(z.string()) }),
+          custom_ranges: z.record(z.string(), z.tuple([z.number(), z.number()])),
         }),
         ideas: z.object({ headings: z.array(z.string()), questions: z.array(z.string()) }),
         competitors: z.array(z.object({

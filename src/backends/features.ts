@@ -2,7 +2,7 @@
 // Tools reach them through requireSession() (tools/shared.ts); the API
 // backend simply has none.
 
-import type { AiRequest, AiResult, CompetitorSelection, ContentPlanIdea, PageContent, ProjectSettings, ProjectSettingsPatch } from './Backend.js';
+import type { ContentInput, AiRequest, AiResult, CompetitorSelection, ContentPlanIdea, PageContent, ProjectSettings, ProjectSettingsPatch } from './Backend.js';
 
 export interface AnalysisFeatures {
   setDone(queryId: string, done: boolean, signal?: AbortSignal): Promise<void>;
@@ -12,6 +12,45 @@ export interface AnalysisFeatures {
   selectCompetitors(queryId: string, selection: CompetitorSelection, signal?: AbortSignal): Promise<string[]>;
   /** NeuronWriter fetches a URL and extracts its title, description and body (nothing is saved). */
   fetchPage(queryId: string, url: string, signal?: AbortSignal): Promise<PageContent>;
+  /** Custom terms, ranges, exclusions and the negative-terms filter of one analysis. */
+  updateTerms(queryId: string, change: TermAction, signal?: AbortSignal): Promise<void>;
+  /** Targets, target URL, person, deadline, distribution notes. */
+  updateAnalysis(queryId: string, patch: AnalysisPatch, signal?: AbortSignal): Promise<void>;
+  /** Soft delete: the analysis gets the "Deleted" tag and can be restored by removing it. */
+  deleteQuery(projectId: string, queryId: string, signal?: AbortSignal): Promise<void>;
+  refreshMoz(queryId: string, signal?: AbortSignal): Promise<void>;
+  /** Refreshes search volumes for the project's language|engine targeting; returns the targeting. */
+  refreshVolume(projectId: string, signal?: AbortSignal): Promise<string>;
+  checkPlagiarism(queryId: string, content: ContentInput, signal?: AbortSignal): Promise<PlagiarismResult>;
+  /** NeuronWriter's DOCX export of the given content. */
+  exportDocx(queryId: string, content: ContentInput, fileName: string, signal?: AbortSignal): Promise<Uint8Array>;
+}
+
+export interface PlagiarismResult {
+  check_id: string | null;
+  unique_percent: number | null;
+  matched_sentences: number | null;
+  sources: number | null;
+  details_url: string | null;
+}
+
+export type TermAction =
+  | { action: 'add'; terms: string[]; location: 'text' | 'h1' | 'h2' }
+  | { action: 'remove'; term: string; location: 'text' | 'h1' | 'h2' }
+  | { action: 'set_range'; term: string; min: number; max: number }
+  | { action: 'reset_range'; term: string }
+  | { action: 'exclude'; term: string }
+  | { action: 'reinclude'; term: string }
+  | { action: 'negative_filter'; on: boolean };
+
+export interface AnalysisPatch {
+  target_word_count?: number;
+  target_readability?: number;
+  target_url?: string;
+  assigned_to?: string;
+  /** YYYY-MM-DD, or '' to clear. */
+  deadline?: string;
+  distribution?: string;
 }
 
 export interface AiFeatures {

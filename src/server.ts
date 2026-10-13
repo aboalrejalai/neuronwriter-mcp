@@ -3,7 +3,9 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { Backend } from './backends/Backend.js';
 import { registerAccountTools } from './tools/account.js';
 import { registerAiTools } from './tools/ai.js';
+import { registerAnalysisTools } from './tools/analysis.js';
 import { registerContentTools, registerPageTools } from './tools/content.js';
+import { registerMaintenanceTools } from './tools/maintenance.js';
 import { registerProjectTools } from './tools/projects.js';
 import { registerQueryManagementTools, registerQueryTools } from './tools/queries.js';
 
@@ -23,8 +25,10 @@ export function createServer(backend: Backend): McpServer {
   registerProjectTools(server, backend);
   registerQueryTools(server, backend);
   registerQueryManagementTools(server, backend);
+  registerAnalysisTools(server, backend);
   registerContentTools(server, backend);
   registerPageTools(server, backend);
+  registerMaintenanceTools(server, backend);
   registerAiTools(server, backend);
   return server;
 }
