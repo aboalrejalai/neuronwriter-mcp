@@ -4,7 +4,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { APP_URL } from './backends/Backend.js';
 import { selectBackend } from './backends/select.js';
 import { launchContext, profileDir } from './backends/session/browser.js';
-import { readProjectsNav } from './backends/session/pageScripts.js';
+import { readProjectsNav } from './backends/session/pageScripts/project.js';
 import { NwError } from './errors.js';
 import { log } from './log.js';
 import { VERSION, createServer } from './server.js';

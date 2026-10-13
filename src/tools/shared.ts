@@ -1,7 +1,9 @@
 import type { CallToolResult, ServerNotification, ServerRequest, ToolAnnotations } from '@modelcontextprotocol/sdk/types.js';
 import type { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import { z } from 'zod';
-import { NwError } from '../errors.js';
+import type { Backend } from '../backends/Backend.js';
+import type { SessionFeatures } from '../backends/features.js';
+import { NotSupportedError, NwError } from '../errors.js';
 import { log } from '../log.js';
 
 export type Extra = RequestHandlerExtra<ServerRequest, ServerNotification>;
@@ -72,4 +74,10 @@ export async function reportProgress(extra: Extra, progress: number, total: numb
   const progressToken = extra._meta?.progressToken;
   if (progressToken === undefined) return;
   await extra.sendNotification({ method: 'notifications/progress', params: { progressToken, progress, total, message } }).catch(() => undefined);
+}
+
+/** Session-only capabilities, or a NotSupported error the agent can act on. */
+export function requireSession(backend: Backend, feature: string): SessionFeatures {
+  if (!backend.features) throw new NotSupportedError(feature, backend.name);
+  return backend.features;
 }

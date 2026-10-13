@@ -1,7 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { analysisUrl, type Backend } from '../backends/Backend.js';
-import { READ_ONLY, contentFields, handle, ok, queryId, scoreShape } from './shared.js';
+import { READ_ONLY, contentFields, handle, ok, queryId, scoreShape, requireSession } from './shared.js';
 
 export function registerContentTools(server: McpServer, backend: Backend): void {
   server.registerTool(
@@ -88,7 +88,7 @@ export function registerContentTools(server: McpServer, backend: Backend): void 
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
     handle(async (args, extra) => {
-      await backend.setDone(args.query, args.done, extra.signal);
+      await requireSession(backend, 'Marking content as done').analysis.setDone(args.query, args.done, extra.signal);
       return ok(args.done ? 'Marked as done.' : 'Marked as not done.', { query_id: args.query, done: args.done });
     }),
   );
@@ -121,7 +121,7 @@ export function registerPageTools(server: McpServer, backend: Backend): void {
       annotations: READ_ONLY,
     },
     handle(async (args, extra) => {
-      const page = await backend.fetchPage(args.query, args.url, extra.signal);
+      const page = await requireSession(backend, 'Fetching a page').analysis.fetchPage(args.query, args.url, extra.signal);
       const score = args.score && page.html ? await backend.scoreContent(args.query, page, extra.signal) : null;
       const truncated = page.html.length > args.max_chars;
       return ok(`Fetched "${page.title || args.url}" (${page.html.length} characters)${score ? `, content score ${score.content_score ?? '?'}` : ''}.`, {

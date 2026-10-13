@@ -3,10 +3,10 @@
 // Not exercised against the live API yet: the owner's plan has no key.
 
 import axios, { type AxiosInstance } from 'axios';
-import { NeuronWriterError, NotSupportedError, PlanLimitError, RetryableError, isPlanLimitMessage } from '../../errors.js';
+import { NeuronWriterError, PlanLimitError, RetryableError, isPlanLimitMessage } from '../../errors.js';
 import { Limiter, type RequestKind } from '../../limiter.js';
 import { sanitizeExternalText } from '../../sanitize.js';
-import { analysisUrl, type AccountStatus, type Backend, type ContentInput, type ContentRevision, type CreateQueryInput, type AiResult, type ContentPlanIdea, type PageContent, type Project, type ProjectSettings, type QuerySummary, type Recommendations, type Score, type TermRange } from '../Backend.js';
+import { analysisUrl, type AccountStatus, type Backend, type ContentInput, type ContentRevision, type CreateQueryInput, type Project, type QuerySummary, type Recommendations, type Score, type TermRange } from '../Backend.js';
 
 const API_ENDPOINT = 'https://app.neuronwriter.com/neuron-api/0.5/writer';
 
@@ -83,45 +83,9 @@ export class ApiBackend implements Backend {
     return toScore(await this.call('write', '/import-content', { query: queryId, ...input }, signal));
   }
 
-  async setDone(): Promise<void> {
-    throw new NotSupportedError('Marking content as done', this.name);
-  }
-
   async createQuery(input: CreateQueryInput, signal?: AbortSignal): Promise<{ query_id: string | null }> {
     const data = await this.call<Record<string, unknown>>('write', '/new-query', { ...input }, signal);
     return { query_id: typeof data.query === 'string' ? data.query : null };
-  }
-
-  async generateAi(): Promise<AiResult> {
-    throw new NotSupportedError('AI generation', this.name);
-  }
-
-  async setTags(): Promise<void> {
-    throw new NotSupportedError('Editing tags', this.name);
-  }
-
-  async selectCompetitors(): Promise<string[]> {
-    throw new NotSupportedError('Selecting competitors', this.name);
-  }
-
-  async fetchPage(): Promise<PageContent> {
-    throw new NotSupportedError('Fetching a page', this.name);
-  }
-
-  async listContentPlan(): Promise<ContentPlanIdea[]> {
-    throw new NotSupportedError('The content plan', this.name);
-  }
-
-  async addContentPlanIdea(): Promise<void> {
-    throw new NotSupportedError('The content plan', this.name);
-  }
-
-  async getProjectSettings(): Promise<ProjectSettings> {
-    throw new NotSupportedError('Project settings', this.name);
-  }
-
-  async updateProjectSettings(): Promise<ProjectSettings> {
-    throw new NotSupportedError('Project settings', this.name);
   }
 
   async close(): Promise<void> {}

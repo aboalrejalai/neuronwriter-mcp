@@ -1,3 +1,5 @@
+import type { SessionFeatures } from './features.js';
+
 // The contract both backends implement. Tools only talk to this interface,
 // so they behave the same whichever backend answers.
 
@@ -169,6 +171,8 @@ export type CompetitorSelection = { mode: 'top10' | 'top30' } | { mode: 'custom'
 
 export interface Backend {
   readonly name: BackendName;
+  /** Session-only capabilities (the web app beyond the public API); absent on the API backend. */
+  readonly features?: SessionFeatures;
   status(signal?: AbortSignal): Promise<AccountStatus>;
   listProjects(signal?: AbortSignal): Promise<Project[]>;
   listQueries(projectId: string, signal?: AbortSignal): Promise<QuerySummary[]>;
@@ -177,22 +181,8 @@ export interface Backend {
   scoreContent(queryId: string, input: ContentInput, signal?: AbortSignal): Promise<Score>;
   /** Saves the content as a new revision and returns its score. */
   importContent(queryId: string, input: ContentInput, signal?: AbortSignal): Promise<Score>;
-  setDone(queryId: string, done: boolean, signal?: AbortSignal): Promise<void>;
   /** Spends 1 Content Writer analysis. Returns the new query id once it is listed. */
   createQuery(input: CreateQueryInput, signal?: AbortSignal): Promise<{ query_id: string | null }>;
-  /** Spends AI credits. */
-  generateAi(queryId: string, request: AiRequest, signal?: AbortSignal): Promise<AiResult>;
-  /** Replaces the analysis' tags (the "Done"/"Deleted" statuses are tags too). */
-  setTags(projectId: string, queryId: string, tags: string[], signal?: AbortSignal): Promise<void>;
-  /** Changes which competitors the analysis is computed from; returns the selected URLs. */
-  selectCompetitors(queryId: string, selection: CompetitorSelection, signal?: AbortSignal): Promise<string[]>;
-  /** NeuronWriter fetches a URL and extracts its title, description and body (nothing is saved). */
-  fetchPage(queryId: string, url: string, signal?: AbortSignal): Promise<PageContent>;
-  listContentPlan(projectId: string, signal?: AbortSignal): Promise<ContentPlanIdea[]>;
-  addContentPlanIdea(projectId: string, keyword: string, additionalKeywords: string[], signal?: AbortSignal): Promise<void>;
-  getProjectSettings(projectId: string, signal?: AbortSignal): Promise<ProjectSettings>;
-  /** Reads every setting, applies the patch and saves the whole form (the app's only way to save). */
-  updateProjectSettings(projectId: string, patch: ProjectSettingsPatch, signal?: AbortSignal): Promise<ProjectSettings>;
   close(): Promise<void>;
 }
 

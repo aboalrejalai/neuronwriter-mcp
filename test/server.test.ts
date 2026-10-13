@@ -4,6 +4,7 @@ import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { AccountStatus, AiRequest, AiResult, Backend, CompetitorSelection, ContentInput, ContentPlanIdea, ContentRevision, CreateQueryInput, PageContent, Project, ProjectSettings, ProjectSettingsPatch, QuerySummary, Recommendations, Score } from '../src/backends/Backend.js';
 import { PlanLimitError, SessionExpiredError } from '../src/errors.js';
+import type { SessionFeatures } from '../src/backends/features.js';
 import { createServer } from '../src/server.js';
 
 const ARABIC_HTML = '<h1>ديكورات مكة</h1><p>دليل شامل لتحويل منزلك إلى تحفة فنية عصرية ‎– مع أفضل معلم ديكورات.</p>';
@@ -16,6 +17,24 @@ class FakeBackend implements Backend {
     { id: 'c1f8fbd2b38960d3', keyword: 'ديكورات مكة', created: null, engine: 'SA', content_score: 9, word_count: 409, tags: [], url: 'https://app.neuronwriter.com/analysis/view/c1f8fbd2b38960d3' },
     ...Array.from({ length: 30 }, (_, i) => ({ id: i.toString(16).padStart(16, '0'), keyword: `keyword ${i}`, created: null, engine: 'US', content_score: i, word_count: 100, tags: i % 2 ? ['odd'] : [], url: '' })),
   ];
+
+  features: SessionFeatures | undefined = {
+    analysis: {
+      setDone: (q, done) => this.setDone(q, done),
+      setTags: (p, q, tags) => this.setTags(p, q, tags),
+      selectCompetitors: (q, sel) => this.selectCompetitors(q, sel),
+      fetchPage: (q, url) => this.fetchPage(q, url),
+    },
+    ai: { generate: (q, req) => this.generateAi(q, req) },
+    planning: {
+      listContentPlan: () => this.listContentPlan(),
+      addContentPlanIdea: (p, k, a) => this.addContentPlanIdea(p, k, a),
+    },
+    projects: {
+      getSettings: () => this.getProjectSettings(),
+      updateSettings: (p, patch) => this.updateProjectSettings(p, patch),
+    },
+  };
 
   private track(name: string) {
     this.calls.push(name);
@@ -223,6 +242,15 @@ describe('management tools', () => {
   it('adds content plan ideas', async () => {
     const result = await call('nw_add_content_plan_idea', { project: '6ec9249b8de0a586', keyword: 'بديل الرخام مكة', additional_keywords: ['بديل الرخام'] });
     expect(result.structuredContent).toMatchObject({ ideas: [{ keyword: 'بديل الرخام مكة', additional_keywords: ['بديل الرخام'] }] });
+  });
+});
+
+describe('backend without session features', () => {
+  it('reports session-only tools as not supported', async () => {
+    (backend as { features?: SessionFeatures }).features = undefined;
+    const result = await call('nw_set_done', { query: 'c1f8fbd2b38960d3', done: true });
+    expect(result.isError).toBe(true);
+    expect(text(result)).toContain('not available on the session backend');
   });
 });
 

@@ -8,6 +8,8 @@ export interface Endpoint {
   kind: RequestKind;
   /** Spends Content Writer analyses or AI credits. */
   spendsCredits: boolean;
+  /** How the app sends it; JSON string body unless stated. */
+  encoding?: 'json' | 'form' | 'get';
 }
 
 export const ENDPOINTS = {

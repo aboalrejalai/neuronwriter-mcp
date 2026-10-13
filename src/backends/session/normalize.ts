@@ -4,7 +4,9 @@
 import { NeuronWriterError, PlanLimitError, RetryableError, SessionExpiredError, isPlanLimitMessage } from '../../errors.js';
 import { sanitizeExternalText } from '../../sanitize.js';
 import { analysisUrl, type AccountStatus, type Competitor, type ContentPlanIdea, type ProjectSettings, type ProjectSettingsPatch, type QuerySummary, type Recommendations, type Score, type TermRange, type Usage } from '../Backend.js';
-import type { InPageResponse, RawAnalysisPage, RawContentPlanIdea, RawQueryRow } from './pageScripts.js';
+import type { RawAnalysisPage } from './pageScripts/analysis.js';
+import type { InPageResponse } from './pageScripts/common.js';
+import type { RawContentPlanIdea, RawQueryRow } from './pageScripts/project.js';
 
 const toNumber = (value: unknown): number | null => {
   if (value === null || value === undefined || value === '' || value === 'null') return null;

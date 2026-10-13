@@ -2,7 +2,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { Backend } from '../backends/Backend.js';
 import { NwError } from '../errors.js';
-import { READ_ONLY, handle, ok, projectId } from './shared.js';
+import { READ_ONLY, handle, ok, projectId, requireSession } from './shared.js';
 
 const lineList = z.array(z.string().min(1).max(300)).max(500);
 
@@ -45,7 +45,7 @@ export function registerProjectTools(server: McpServer, backend: Backend): void 
       annotations: READ_ONLY,
     },
     handle(async (args, extra) => {
-      const settings = await backend.getProjectSettings(args.project, extra.signal);
+      const settings = await requireSession(backend, 'Project settings').projects.getSettings(args.project, extra.signal);
       return ok(`Settings of "${settings.name || settings.homepage}" (${settings.engine}, ${settings.language}).`, { ...settings });
     }),
   );
@@ -85,7 +85,7 @@ export function registerProjectTools(server: McpServer, backend: Backend): void 
     handle(async (args, extra) => {
       const { project, ...patch } = args;
       if (Object.keys(patch).length === 0) throw new NwError('Nothing to change.', 'Pass at least one setting to update.');
-      const settings = await backend.updateProjectSettings(project, patch, extra.signal);
+      const settings = await requireSession(backend, 'Project settings').projects.updateSettings(project, patch, extra.signal);
       return ok(`Saved settings of "${settings.name || settings.homepage}".`, { ...settings });
     }),
   );
@@ -103,7 +103,7 @@ export function registerProjectTools(server: McpServer, backend: Backend): void 
       annotations: READ_ONLY,
     },
     handle(async (args, extra) => {
-      const ideas = await backend.listContentPlan(args.project, extra.signal);
+      const ideas = await requireSession(backend, 'The content plan').planning.listContentPlan(args.project, extra.signal);
       return ok(`${ideas.length} idea(s) in the content plan.`, { project: args.project, ideas });
     }),
   );
@@ -125,8 +125,9 @@ export function registerProjectTools(server: McpServer, backend: Backend): void 
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
     handle(async (args, extra) => {
-      await backend.addContentPlanIdea(args.project, args.keyword, args.additional_keywords, extra.signal);
-      const ideas = await backend.listContentPlan(args.project, extra.signal);
+      const planning = requireSession(backend, 'The content plan').planning;
+      await planning.addContentPlanIdea(args.project, args.keyword, args.additional_keywords, extra.signal);
+      const ideas = await planning.listContentPlan(args.project, extra.signal);
       return ok(`Added "${args.keyword}" to the content plan (${ideas.length} idea(s) now).`, { project: args.project, ideas });
     }),
   );

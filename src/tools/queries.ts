@@ -3,7 +3,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { analysisUrl, type Backend, type QuerySummary, type Recommendations } from '../backends/Backend.js';
 import { ConfirmationRequiredError, NwError } from '../errors.js';
-import { READ_ONLY, UNTRUSTED_NOTE, confirm, handle, ok, projectId, queryId, reportProgress } from './shared.js';
+import { READ_ONLY, UNTRUSTED_NOTE, confirm, handle, ok, projectId, queryId, reportProgress, requireSession } from './shared.js';
 
 const POLL_INTERVAL_MS = 15_000;
 
@@ -217,7 +217,7 @@ export function registerQueryManagementTools(server: McpServer, backend: Backend
       if (!current) throw new NwError(`Analysis ${args.query} is not in project ${args.project}.`, 'Check the ids with nw_list_queries (status: "all").');
       const remove = new Set(args.remove.map((t) => t.toLowerCase()));
       const tags = [...new Set([...current.tags.filter((t) => !remove.has(t.toLowerCase())), ...args.add])];
-      await backend.setTags(args.project, args.query, tags, extra.signal);
+      await requireSession(backend, 'Editing tags').analysis.setTags(args.project, args.query, tags, extra.signal);
       const after = (await backend.listQueries(args.project, extra.signal)).find((q) => q.id === args.query);
       return ok(`Tags: ${after?.tags.join(', ') || '(none)'}.`, { query_id: args.query, tags: after?.tags ?? tags });
     }),
@@ -241,7 +241,7 @@ export function registerQueryManagementTools(server: McpServer, backend: Backend
     },
     handle(async (args, extra) => {
       if (args.mode === 'custom' && !args.keep_urls?.length) throw new NwError('mode "custom" needs keep_urls.', 'Pass the competitor URLs to keep.');
-      const selected = await backend.selectCompetitors(
+      const selected = await requireSession(backend, 'Selecting competitors').analysis.selectCompetitors(
         args.query,
         args.mode === 'custom' ? { mode: 'custom', keep_urls: args.keep_urls! } : { mode: args.mode },
         extra.signal,

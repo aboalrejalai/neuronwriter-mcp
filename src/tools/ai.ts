@@ -2,7 +2,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { AI_KINDS, AI_MODELS, AI_TONES, type Backend } from '../backends/Backend.js';
 import { ConfirmationRequiredError, NwError } from '../errors.js';
-import { confirm, handle, ok, queryId } from './shared.js';
+import { confirm, handle, ok, queryId, requireSession } from './shared.js';
 
 const KIND_HELP =
   'outline (H1-H3 article outline from the analysis terms and competitor outlines), meta (SEO title + meta description), intro (article intro), ' +
@@ -42,7 +42,7 @@ export function registerAiTools(server: McpServer, backend: Backend): void {
       if ((args.kind === 'rephrase' || args.kind === 'expand') && !args.text) throw new NwError(`kind "${args.kind}" needs text.`, 'Pass the text to rewrite in `text`.');
       if (args.kind === 'paragraph' && !args.heading) throw new NwError('kind "paragraph" needs heading.', 'Pass the section heading in `heading`.');
       if (!args.confirm) throw new ConfirmationRequiredError('NeuronWriter AI credits');
-      const result = await backend.generateAi(args.query, args, extra.signal);
+      const result = await requireSession(backend, 'AI generation').ai.generate(args.query, args, extra.signal);
       return ok(`Generated ${args.kind}${result.usage ? ` (${result.usage})` : ''}.`, { query_id: args.query, kind: args.kind, ...result });
     }),
   );
