@@ -1,80 +1,94 @@
 # NeuronWriter capability map
 
-What the web app can do, what this MCP does today, and what is left. Built on 2026-10-13 from a read-only crawl of the owner's account (25 pages, 136 `/backend/*` endpoints in the app's JS) and four parallel code reviews. Request bodies for everything below are in [`backend-endpoints.md`](backend-endpoints.md) or were recorded in that review.
+What the web app can do on the owner's Bronze plan, and what this MCP does about it. Built from a read-only crawl of the app (136 `/backend/*` endpoints), four parallel code reviews, and live runs on the owner's account.
 
-Legend: ✅ built and **tested live on the owner's account** · 🟡 endpoint known, not built yet · 🔒 blocked by plan or deliberately not automated.
+Legend:
+- ✅ built and **tried live on the owner's account**.
+- 🟡 built and unit-tested, live run still pending (the reason is given).
+- ⛔ deliberately not automated.
+- 🔒 not on the plan, or needs something the owner must do first.
+
+Live runs so far: 2026-10-12/13 on the old projects (deleted by the owner) and on `atalanajd.com` (`c4e17fb2aa86f36b`). On 2026-10-13 NeuronWriter left two new analyses of that project at 0 % for over an hour, so the analysis-level tools below wait for a ready analysis.
 
 ## Account and projects
 
-| Capability | Status | Tool / endpoint |
+| Capability | Status | Tool |
 |---|---|---|
-| Plan, monthly usage, reset date | ✅ | `nw_status` |
+| Plan, usage, reset date | ✅ | `nw_status` |
 | List projects | ✅ | `nw_list_projects` |
-| Read settings (name, domain, engine, language, keyword lists, domains, AI Profile, contact info, WordPress user) | ✅ | `nw_get_project_settings` |
-| Change settings (same fields; everything else saved back unchanged) | ✅ | `nw_update_project_settings` (`update-project-settings` saves the whole form at once) |
-| Add/remove one competitor or excluded domain | 🟡 | `toggle-project-domain-list` (toggle) — covered by `nw_update_project_settings` lists |
-| AI Profile "Crawl and AI-extract" from up to 3 URLs | 🟡 | `extract-ai-overview` (fills the fields, does not save; likely spends AI credits) |
-| Create a project | 🔒 | `new-project-domain` → `new-project`; the plan has 2/2 projects used |
-| Delete a project / account | 🔒 | `delete-project`, `delete-my-account` — never automated |
-| Share a project or analysis (sends an e-mail invite) | 🔒 | `add-project-access`, `add-analysis-access` — sends messages on the owner's behalf; not automated |
-| WordPress: save credentials, test, import a post, publish to WordPress | 🟡 | `integration/wp-save-configuration`, `wp-test`, `wp-get-posts`, `wp-get-post`, `wp-update-post` (publishing writes to the live site) |
-| Custom logo in reports | 🔒 | Agency/Enterprise plans only |
-| Neuron API, official MCP, own OpenAI/Anthropic keys | 🔒 | Gold+ |
+| Create a project (wizard: limit → domain check → create, keywords via settings) | ✅ created `atalanajd.com` | `nw_create_project` |
+| Read / change settings: name, domain, engine, language, keyword lists, competitor and excluded domains, AI Profile, report contact; everything else saved back unchanged | ✅ | `nw_get_project_settings`, `nw_update_project_settings` |
+| AI Profile extraction from up to 3 URLs (not saved) | 🟡 runs `extract-ai-overview`; AI credits | `nw_generate_ai` kind `ai_profile` |
+| Delete a project or the account; sharing and invitations; profile, e-mail, 2FA, API key, billing | ⛔ | — |
+| WordPress | 🔒 the owner's site is not WordPress (2026-10-13) | — |
+| Custom report logo | 🔒 Agency+ | — |
 
 ## Content Writer (analyses)
 
-| Capability | Status | Tool / endpoint |
+| Capability | Status | Tool |
 |---|---|---|
-| List analyses with score, words, tags; active/done/deleted filter | ✅ | `nw_list_queries` |
-| Create an analysis (1 of 25/month), dedupe by keyword | ✅ | `nw_create_query` |
-| Supporting keywords, custom competitors, target URL, city geolocation on create | 🟡 | `new-analysis` fields not exposed yet: `custom_competitors`, `target_url`, `geolocation` |
-| Recommendations: term ranges, title/H1/H2/description terms, entities, heading ideas, questions, targets, competitors with score, words and H1-H3 outline | ✅ | `nw_get_recommendations` |
-| Choose competitors (top 10 / top 30 / custom) | ✅ | `nw_select_competitors` |
-| Custom terms, ranges, exclude terms, negative-term filter | 🟡 | `analysis-add-custom-term`, `analysis-update-custom-term-params`, `analysis-exclude-term`, `analysis-update-exclusion-settings` |
-| Word-count / readability targets | 🟡 | `analysis-update-targets` (`target_name` values not traced yet) |
-| Read saved article | ✅ | `nw_get_content` (byte-identical Arabic) |
-| Score content without saving (= editor score) | ✅ | `nw_score_content` |
-| Save article (title, description, body) | ✅ | `nw_import_content` |
-| Read + score any live URL | ✅ | `nw_fetch_page` (`auto-import-content`) |
-| Mark done / not done | ✅ | `nw_set_done` |
-| Tags (Optimize, Improve, Done, Deleted, custom); restore deleted | ✅ | `nw_update_tags` (`update-tags-status`, full replace) |
-| Person / deadline | 🟡 | `update-analysis-management-info` |
-| Analysis target URL | 🟡 | `update-target-url` |
-| Soft-delete an analysis | 🟡 | `delete-analysis` (restorable via the Deleted tag) |
-| Plagiarism check | 🟡 | `check-for-plagiarism` (likely spends credits) |
-| Export DOCX etc. | 🟡 | `export-content-as` (returns base64) |
-| Comments | 🟡 | `add-analysis-comment`, `edit-analysis-comment`, `update-comment-status` |
-| Internal-link suggestions (classic / AI) | 🟡 | `get-internal-links-suggestions` / `get-ai-internal-links-suggestions` (AI credits) |
-| Search Console keywords for a URL | 🟡 | `get-url-top-keywords` (needs Search Console) |
+| List analyses with score, words, tags; active / done / deleted | ✅ | `nw_list_queries` |
+| Create an analysis, dedupe by keyword | ✅ | `nw_create_query` |
+| City targeting, custom competitors, target URL on create | 🟡 needs a run that spends an analysis | `nw_create_query` (`city`, `custom_competitors`, `target_url`) |
+| Recommendations: term ranges, title/H1/H2/description terms, entities, heading ideas, questions, targets, competitors with H1-H3 outlines, excluded/custom terms | ✅ (except the excluded/custom fields: 🟡) | `nw_get_recommendations` |
+| Competitors top 10 / top 30 / custom | ✅ | `nw_select_competitors` |
+| Custom terms, ranges, exclude/re-include, negative filter | 🟡 ready analysis | `nw_update_terms` |
+| Targets, target URL, person, deadline, distribution | 🟡 ready analysis | `nw_update_analysis` |
+| Read saved article, any revision list | ✅ article · 🟡 revision list | `nw_get_content`, `nw_get_analysis_details` part `revisions` |
+| Score without saving, with the editor's per-term verdict | ✅ score · 🟡 per-term list | `nw_score_content` |
+| Save article (refuses while the web editor has it open) | ✅ save · 🟡 guard | `nw_import_content` |
+| Read and score any URL | ✅ | `nw_fetch_page` |
+| Mark done, tags (Done/Deleted/Optimize/…) | ✅ | `nw_set_done`, `nw_update_tags` |
+| Soft delete / restore | 🟡 ready analysis | `nw_delete_query` + `nw_update_tags` |
+| Plagiarism | 🟡 may use a plagiarism quota | `nw_check_plagiarism` |
+| DOCX export to a file | 🟡 ready analysis | `nw_export_content` |
+| Comments | 🟡 ready analysis | `nw_get_analysis_details` part `comments`, `nw_update_comments` |
+| Internal-link suggestions, status, notes | 🟡 ready analysis | `nw_get_analysis_details` part `internal_links`, `nw_update_internal_links` |
+| Content ideas from an analysis → content plan | 🟡 ready analysis | part `content_ideas`, `nw_update_content_plan` action `add_idea` |
+| Refresh search volumes | ✅ | `nw_refresh_metrics` what `volume` |
+| Refresh Moz metrics | 🟡 ready analysis | `nw_refresh_metrics` what `moz` |
 
 ## NeuronWriter AI (AI credits)
 
-| Capability | Status | Tool / endpoint |
-|---|---|---|
-| Outline (Content Designer template) | ✅ | `nw_generate_ai` kind `outline` |
-| SEO title + meta description | ✅ | `nw_generate_ai` kind `meta` |
-| Intro, paragraph under a heading, FAQ, rephrase, expand, one-click long-form article | 🟡 built, **not tried live yet** (same endpoint as outline/meta, template body from the app's form) | `nw_generate_ai` kinds `intro`, `paragraph`, `faq`, `rephrase`, `expand`, `article` |
-| Auto-insert missing terms into the text (~2000 credits) | 🟡 | `autoinsert-terms` |
-| AI content score | 🟡 | `check-readability-ai` |
-| Extract facts from sources (~5000 credits) | 🟡 | `extract-facts` |
-| AI images | 🟡 | `generate-ai-image-ideas`, `generate-ai-image` |
-| Custom AI templates | 🟡 | `save-custom-ai-template`, `delete-custom-ai-template` |
-| `generate-ai-outline` | 🔒 | dead code in the app; answers HTTP 500 |
+Everything below goes through one tool, `nw_generate_ai` with `confirm: true`. Model choice is `default` (GPT-5 mini), `gpt-5`, `claude` or `gemini`. `generate-ai-outline` is ⛔: it is dead code in the app and answers HTTP 500.
 
-Model choice (`model`): default = GPT-5 mini, `gpt-5`, `claude` (Sonnet 5), `gemini` (2.5 Flash).
+| Kinds | Status |
+|---|---|
+| `outline`, `meta` | ✅ (~100 credits each) |
+| `intro`, `paragraph`, `faq`, `rephrase`, `expand`, `article`, `titles`, `product_description`, `category_description`, `product_reviews`, `content_plan_keywords`, `topical_map`, `youtube_description`, `email`, `synonyms`, `prompt` | 🟡 ready analysis (same endpoint and body path as `outline`/`meta`) |
+| `insert_terms` (~2000), `ai_score`, `internal_links`, `image_ideas`, `image` (saved as a file), `custom`, `designer_article` | 🟡 ready analysis |
+| `facts` (~5000) | 🟡 needs the owner's approval for the cost |
+| `ai_profile`, `suggest_brands`, `suggest_prompts`, `readiness_audit`, `earn_mention`, `earn_mention_rewrite` | 🟡 project-scoped; run pending |
+| Custom templates list/save/delete | 🟡 ready analysis | 
 
 ## Planning
 
-| Capability | Status | Tool / endpoint |
+| Capability | Status | Tool |
 |---|---|---|
-| Content plan: list ideas | ✅ | `nw_list_content_plan` |
-| Content plan: add an idea | ✅ | `nw_add_content_plan_idea` |
-| Content plan: delete idea, person, deadline | 🟡 | `delete-from-content-plan`, `update-cp-management-info` |
-| Content management calendar (tasks by status/person) | 🟡 | `get-content-calendar-events` (form-encoded, not JSON) |
-| Inventory: keywords, URLs, tasks, pillar/satellite pages | 🟡 | `add-inventory-*`, `inventory-*`, `create-update-inventory-task`, `update-inventory-url` |
-| Topics (topic research) | 🔒 | "Module not available" on this plan |
-| AI Visibility: brands, prompt suggestions, monitored prompts (0/5), readiness audit, earn-mention | 🟡 | `ai-tracker/*` (domain projects only; suggestions likely spend AI credits) |
+| Content plan: list, add, person, expected date, delete | ✅ | `nw_get_project_data` part `content_plan`, `nw_update_content_plan` |
+| Content management calendar (dated analyses and plan ideas) | ✅ | `nw_get_project_data` part `calendar` |
+| Stand-alone tasks | ⛔ hidden in the web UI (the calendar's "New task" button is commented out); the tool was removed after a live run created an invisible task | — |
+| AI Visibility: overview, brands, add/delete monitored prompts (prompt id = MD5 of its text) | ✅ | `nw_get_project_data` part `ai_visibility`, `nw_update_ai_visibility` |
+| AI Visibility prompt details | 🟡 needs a prompt kept for a while | part `ai_visibility_prompt` |
+| Lookups: city locations, suggested target URL | 🟡 run pending | `nw_lookup` |
+| Search Console keywords of a URL, hub pages, keyword/URL inventory | 🔒 needs Search Console connected to the project (the inventory lives on the Search Console "visibility" page) | `nw_lookup` (`url_keywords`, `hub_pages`) |
+| Topics | 🔒 not on the plan | — |
 
-## Live test log (2026-10-13)
+## Robustness
 
-Spent: 1 analysis ("بديل الخشب مكة", `6677c6ba75b413e6`) and 200 AI credits (meta + outline). Every test change was reverted (tag removed, setting restored, competitors back to top 10) except the content-plan idea "بديل الرخام مكة", kept on purpose.
+| Concern | Status |
+|---|---|
+| Several Claude/Cursor sessions at once | ✅ two servers side by side; the second waits for the browser profile (up to 60 s, 3-min idle release) |
+| AI Visibility page answers 500 while a new prompt initializes | ✅ handled: deleting a prompt avoids that page; 5xx reads as temporary |
+| Writes retried after 5xx | ⛔ never (no double spend) |
+
+## Live test log
+
+- **2026-10-12 / 13, old projects (deleted since):**
+  - Spent 1 analysis and 200 AI credits.
+  - Every change was reverted.
+- **2026-10-13, atalanajd.com:**
+  - Created the project with its settings, 23 keywords, brand terms, domains and AI Profile, all kept on purpose.
+  - Created 2 analyses: `871b250294d89d4c` «تصريف مياه الأمطار» and `6bd76502ab375a8d` «تجميع مياه الأمطار». Both were still at 0 % at the time of writing.
+  - The test idea, the monitored prompt and the AI Visibility changes were reverted; the brand names were kept.
+  - One invisible test task from `create-update-inventory-task` remains. The UI has no way to list or delete it.

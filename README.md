@@ -2,14 +2,14 @@
 
 A local MCP server that lets AI agents use your NeuronWriter account (projects, content analyses, SEO recommendations, writing, scoring, NeuronWriter AI). It works on plans **without** API access by using your own logged-in browser session, and it can switch to the official API when a key is available.
 
-> Status **v0.3.0**: 17 tools on MCP SDK 1.32.1, session backend (works on Bronze, no API key) and API backend, 45 tests, every tool tried live on the owner's account. Details: [`.claude/plans/001-neuronwriter-mcp.plan.md`](.claude/plans/001-neuronwriter-mcp.plan.md).
+> Status: **v0.4.0 in progress** — 30 tools covering the whole Bronze plan (see the capability map for what is already tried live). MCP SDK 1.32.1, session backend (no API key needed) and API backend, 61 tests. Plan: [`.claude/plans/002-complete-plan-coverage.plan.md`](.claude/plans/002-complete-plan-coverage.plan.md).
 
 ## What's in this repo
 
 | Path | What | From |
 |---|---|---|
 | `src/index.ts` | CLI: `serve` (MCP on stdio, default), `login`, `status` | ours |
-| `src/tools/` | The 17 `nw_*` tools | ours, tool names after the official MCP |
+| `src/tools/` | The `nw_*` tools | ours, tool names after the official MCP |
 | `src/backends/session/` | Drives NeuronWriter through your logged-in browser profile (Playwright) | ours |
 | `src/backends/api/ApiBackend.ts` | API v0.5 client (Gold+) | [softreviewed/neuronwriter-mcp-server](https://github.com/softreviewed/neuronwriter-mcp-server), moved behind the shared backend contract |
 | `skills/neuronwriter-api/` | Agent skill: brief → write → import → score loop, quota fallback, bash API wrapper, evals | [antongulin/neuronwriter-api-skill](https://github.com/antongulin/neuronwriter-api-skill) |
@@ -110,26 +110,18 @@ With a Gold+ API key, add `"env": { "NEURONWRITER_API_KEY": "your-key" }` and th
 
 ## Tools
 
-17 tools, all tried on the owner's account on 2026-10-13 (`nw_generate_ai` with kinds `meta` and `outline`). Full map of what NeuronWriter can do and what is still to build: [`docs/capability-map.md`](docs/capability-map.md).
+30 tools. What each one covers, and which are already tried live on the owner's account: [`docs/capability-map.md`](docs/capability-map.md).
 
-| Tool | What it does | Costs |
-|---|---|---|
-| `nw_status` | Session check, plan, monthly usage, reset date | — |
-| `nw_list_projects` | Projects and their ids | — |
-| `nw_get_project_settings` | Name, domain, engine, language, keyword lists, domains, AI Profile | — |
-| `nw_update_project_settings` | Change any of those; the rest is saved back unchanged | — |
-| `nw_list_content_plan` / `nw_add_content_plan_idea` | Content plan ideas | — |
-| `nw_list_queries` | Analyses with score, words, tags; active / done / deleted | — |
-| `nw_get_recommendations` | Term ranges, title/H1/H2 terms, entities, questions, heading ideas, targets, competitors with their H1-H3 outlines | — |
-| `nw_select_competitors` | Top 10, top 30 or a custom competitor set | — |
-| `nw_get_content` | Saved article | — |
-| `nw_score_content` | Score HTML like the editor, without saving | — |
-| `nw_fetch_page` | Read any URL (your page, a competitor) and score it | — |
-| `nw_import_content` | Save title, description and body as a new revision | — |
-| `nw_set_done` | Mark done / not done | — |
-| `nw_update_tags` | Add/remove tags (Optimize, Done, Deleted…) | — |
-| `nw_create_query` | New analysis; returns the existing one for the same keyword instead | **1 analysis**, `confirm: true` |
-| `nw_generate_ai` | NeuronWriter AI: outline, meta title + description, intro, paragraph, FAQ, rephrase, expand, article | **AI credits**, `confirm: true` |
+| Area | Tools |
+|---|---|
+| Account & projects | `nw_status`, `nw_list_projects`, `nw_create_project`*, `nw_get_project_settings`, `nw_update_project_settings` |
+| Planning | `nw_get_project_data` (content plan, calendar, AI Visibility), `nw_update_content_plan`, `nw_update_ai_visibility`, `nw_lookup` (cities, target URL, Search Console) |
+| Analyses | `nw_list_queries`, `nw_create_query`*, `nw_get_recommendations`, `nw_select_competitors`, `nw_update_terms`, `nw_update_analysis`, `nw_update_tags`, `nw_delete_query`*, `nw_refresh_metrics`* |
+| Writing | `nw_get_content`, `nw_score_content` (with the editor's per-term verdict), `nw_import_content`, `nw_set_done`, `nw_fetch_page`, `nw_export_content` (DOCX file), `nw_check_plagiarism`* |
+| Collaboration | `nw_get_analysis_details` (revisions, comments, internal links, content ideas), `nw_update_comments`, `nw_update_internal_links` |
+| NeuronWriter AI | `nw_generate_ai`* (26 kinds: outline, meta, intro, paragraph, FAQ, rephrase, expand, article, titles, product/category descriptions, reviews, topical map, YouTube, email, synonyms, free prompt, insert terms, AI score, facts, AI internal links, images, Content Designer article, custom templates, AI Profile, AI Visibility suggestions and audits), `nw_manage_ai_templates` |
+
+\* spends credits, uses a plan slot or deletes: requires `confirm: true` after the user agrees.
 
 Typical request: *"Using NeuronWriter, improve the ديكورات مكة article until it beats the top competitor, save it and mark it done."*
 
