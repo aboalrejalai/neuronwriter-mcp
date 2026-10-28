@@ -1,3 +1,5 @@
+<p align="center"><img src=".github/assets/cover.png" alt="neuronwriter-mcp" width="100%"></p>
+
 # NeuronWriter MCP
 
 A local MCP server that lets AI agents use your NeuronWriter account (projects, content analyses, SEO recommendations, writing, scoring, NeuronWriter AI). It works on plans **without** API access by using your own logged-in browser session, and it can switch to the official API when a key is available.
