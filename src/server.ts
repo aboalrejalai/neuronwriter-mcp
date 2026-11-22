@@ -19,7 +19,7 @@ const INSTRUCTIONS = `NeuronWriter SEO content tools. Typical workflow:
 2. Only if none exists: nw_create_query (spends 1 monthly analysis; ask the user first, then confirm: true).
 3. nw_select_competitors mode top10 (or the owner clicks Top 10 in the UI), then nw_get_recommendations (wait_seconds: 120 for a new analysis).
 4. Write with title + meta description + HTML body. Every nw_score_content and nw_import_content call MUST pass title, description, and html.
-5. Loop nw_score_content until content_score is at least 80, or beats the best competitor score if that is higher. Fix terms from the gaps list each round.
+5. Loop nw_score_content until content_score is at least 85, or beats the best competitor score if that is higher. Fix terms from the gaps list each round.
 6. nw_import_content (same title, description, html), then nw_set_done.
 Never score or import body-only HTML. To optimize a published page: nw_fetch_page, improve, score with title+description, save.
 Tools that spend credits (nw_create_query, nw_generate_ai) require confirm: true after the user approves.`;

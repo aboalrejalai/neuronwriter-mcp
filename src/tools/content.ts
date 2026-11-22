@@ -46,7 +46,7 @@ export function registerContentTools(server: McpServer, backend: Backend): void 
       description:
         'Scores HTML content against an analysis exactly like the NeuronWriter editor does (content score 0-100, word count, readability) without saving anything. ' +
         'It also returns the editor\'s per-term verdict (missing, use more, use less) and which title/H1/H2/description terms are absent, so you know exactly what to fix. ' +
-        'title and description are required. Loop until content_score is at least 80 (or beats the best competitor if that is higher), then nw_import_content. Spends nothing.',
+        'title and description are required. Loop until content_score is at least 85 (or beats the best competitor if that is higher), then nw_import_content. Spends nothing.',
       inputSchema: z.strictObject({ query: queryId, ...requiredContentFields, term_detail: termDetail }),
       outputSchema: z.object(scoreShape),
       annotations: READ_ONLY,
@@ -66,7 +66,7 @@ export function registerContentTools(server: McpServer, backend: Backend): void 
       description:
         'Saves title, meta description and HTML body as a new revision in the NeuronWriter editor of an analysis, then returns its score. ' +
         'title and description are required (same as nw_score_content). Earlier revisions stay available, but the editor will show this version. If the article is open in the web editor right now (recent autosave), it refuses unless force: true. ' +
-        'Use it only after nw_score_content is at least 80 (or beats the best competitor if higher), and only for the analysis the article was written for. Spends nothing.',
+        'Use it only after nw_score_content is at least 85 (or beats the best competitor if higher), and only for the analysis the article was written for. Spends nothing.',
       inputSchema: z.strictObject({
         query: queryId,
         ...requiredContentFields,

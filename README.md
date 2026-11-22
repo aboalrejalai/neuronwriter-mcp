@@ -4,7 +4,7 @@
 
 A local MCP server that lets AI agents use your NeuronWriter account (projects, content analyses, SEO recommendations, writing, scoring, NeuronWriter AI). It works on plans **without** API access by using your own logged-in browser session, and it can switch to the official API when a key is available.
 
-> Status: **v0.4.0 in progress** — 30 tools covering the whole Bronze plan (see the capability map for what is already tried live). MCP SDK 1.32.1, session backend (no API key needed) and API backend, 61 tests. Plan: [`.claude/plans/002-complete-plan-coverage.plan.md`](.claude/plans/002-complete-plan-coverage.plan.md).
+> Status: **v0.3.2** — session MCP for Bronze (no API key), `nw_score_content` / `nw_import_content` require title+description, agent loop gate **content_score ≥ 85**. MCP SDK 1.32.1, 62 tests. Capability map: [`docs/capability-map.md`](docs/capability-map.md). **Public MIT** — clone, `npm install`, `npm run login`, point Cursor at `build/index.js`.
 
 ## What's in this repo
 

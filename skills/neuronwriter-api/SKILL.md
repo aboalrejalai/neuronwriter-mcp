@@ -41,9 +41,9 @@ When the `nw_*` tools are available, use them instead of the bash script. They w
 
 1. After writing, call `nw_score_content` with **title + description + html** every time. Body-only calls are rejected.
 2. Loop: read `terms` gaps → fix body/H2/title/description → score again.
-3. Stop only when `content_score >= 80`, or the score beats the best competitor if that competitor score is higher than 80.
+3. Stop only when `content_score >= 85`, or the score beats the best competitor if that competitor score is higher than 85.
 4. Then `nw_import_content` with the same three fields, then `nw_set_done`.
-5. Never mark an article done under 80.
+5. Never mark an article done under 85. For atalanajd specifically, also follow that repo's `neuronwriter-article` skill.
 
 ## Quota System
 
