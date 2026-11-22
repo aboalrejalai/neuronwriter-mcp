@@ -31,11 +31,19 @@ When the `nw_*` tools are available, use them instead of the bash script. They w
 | `new-query` | `nw_create_query` — returns an existing analysis for the same keyword; spending needs the user's OK, then `confirm: true` |
 | `wait-and-get` / `get-query` | `nw_get_recommendations` with `wait_seconds: 120` |
 | `get-content` | `nw_get_content` |
-| `evaluate-content` | `nw_score_content` |
-| `import-content` | `nw_import_content` |
-| (web UI only) | `nw_set_done`, `nw_generate_outline` (AI credits, `confirm: true`), `nw_status` (remaining credits) |
+| `evaluate-content` | `nw_score_content` — **requires** `title`, `description`, and `html` |
+| `import-content` | `nw_import_content` — **requires** `title`, `description`, and `html` |
+| (web UI only) | `nw_set_done`, `nw_generate_ai` (AI credits, `confirm: true`), `nw_status` (remaining credits) |
 
 `nw_get_recommendations` returns `terms.content_basic` as `{term, min, max}` already parsed from the ranges, and `nw_status` shows remaining analyses, so the quota check no longer needs the dashboard.
+
+### Score gate (required)
+
+1. After writing, call `nw_score_content` with **title + description + html** every time. Body-only calls are rejected.
+2. Loop: read `terms` gaps → fix body/H2/title/description → score again.
+3. Stop only when `content_score >= 80`, or the score beats the best competitor if that competitor score is higher than 80.
+4. Then `nw_import_content` with the same three fields, then `nw_set_done`.
+5. Never mark an article done under 80.
 
 ## Quota System
 

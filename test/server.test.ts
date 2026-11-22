@@ -237,7 +237,12 @@ describe('results', () => {
   it('round-trips Arabic content byte-identical', async () => {
     const got = await call('nw_get_content', { query: 'c1f8fbd2b38960d3' });
     expect((got.structuredContent as { html: string }).html).toBe(ARABIC_HTML);
-    await call('nw_import_content', { query: 'c1f8fbd2b38960d3', html: ARABIC_HTML, title: 'ديكورات مكة' });
+    await call('nw_import_content', {
+      query: 'c1f8fbd2b38960d3',
+      html: ARABIC_HTML,
+      title: 'ديكورات مكة',
+      description: 'دليل ديكورات مكة للمنازل والفلل مع خطوات واضحة قبل اختيار المقاول.',
+    });
     expect(backend.calls).toContain(`importContent:${ARABIC_HTML}`);
   });
 });

@@ -17,9 +17,11 @@ export const VERSION: string = createRequire(import.meta.url)('../package.json')
 const INSTRUCTIONS = `NeuronWriter SEO content tools. Typical workflow:
 1. nw_status (session and monthly limits), nw_list_projects, nw_list_queries to find an existing analysis for the keyword (nw_get_project_data part content_plan for queued ideas).
 2. Only if none exists: nw_create_query (spends 1 monthly analysis; ask the user first, then confirm: true).
-3. nw_get_recommendations (wait_seconds: 120 for a new analysis): write so every content_basic term falls in its min-max range, answer the questions, use the competitor outlines, reach the target word count. nw_select_competitors drops irrelevant competitors.
-4. Loop nw_score_content until the score beats the best competitor, then nw_import_content to save, then nw_set_done.
-To optimize a published page: nw_fetch_page (reads and scores it), improve, score, save.
+3. nw_select_competitors mode top10 (or the owner clicks Top 10 in the UI), then nw_get_recommendations (wait_seconds: 120 for a new analysis).
+4. Write with title + meta description + HTML body. Every nw_score_content and nw_import_content call MUST pass title, description, and html.
+5. Loop nw_score_content until content_score is at least 80, or beats the best competitor score if that is higher. Fix terms from the gaps list each round.
+6. nw_import_content (same title, description, html), then nw_set_done.
+Never score or import body-only HTML. To optimize a published page: nw_fetch_page, improve, score with title+description, save.
 Tools that spend credits (nw_create_query, nw_generate_ai) require confirm: true after the user approves.`;
 
 export function createServer(backend: Backend): McpServer {

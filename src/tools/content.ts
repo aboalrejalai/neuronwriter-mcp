@@ -1,7 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { analysisUrl, type Backend } from '../backends/Backend.js';
-import { READ_ONLY, contentFields, handle, ok, queryId, scoreShape, shapeTerms, termDetail, requireSession } from './shared.js';
+import { READ_ONLY, handle, ok, queryId, requiredContentFields, scoreShape, shapeTerms, termDetail, requireSession } from './shared.js';
 
 export function registerContentTools(server: McpServer, backend: Backend): void {
   server.registerTool(
@@ -46,9 +46,8 @@ export function registerContentTools(server: McpServer, backend: Backend): void 
       description:
         'Scores HTML content against an analysis exactly like the NeuronWriter editor does (content score 0-100, word count, readability) without saving anything. ' +
         'It also returns the editor\'s per-term verdict (missing, use more, use less) and which title/H1/H2/description terms are absent, so you know exactly what to fix. ' +
-        'Use it in a loop while writing: score, fix the listed terms, score again. ' +
-        'Aim to beat the best competitor score. Save the final version with nw_import_content. Spends nothing.',
-      inputSchema: z.strictObject({ query: queryId, ...contentFields, term_detail: termDetail }),
+        'title and description are required. Loop until content_score is at least 80 (or beats the best competitor if that is higher), then nw_import_content. Spends nothing.',
+      inputSchema: z.strictObject({ query: queryId, ...requiredContentFields, term_detail: termDetail }),
       outputSchema: z.object(scoreShape),
       annotations: READ_ONLY,
     },
@@ -66,11 +65,11 @@ export function registerContentTools(server: McpServer, backend: Backend): void 
       title: 'Save an article into the NeuronWriter editor',
       description:
         'Saves title, meta description and HTML body as a new revision in the NeuronWriter editor of an analysis, then returns its score. ' +
-        'Earlier revisions stay available in NeuronWriter, but the editor will show this version. If the article is open in the web editor right now (recent autosave), it refuses unless force: true. ' +
-        'Use it once the content is final (check with nw_score_content first), and only for the analysis the article was written for. Spends nothing.',
+        'title and description are required (same as nw_score_content). Earlier revisions stay available, but the editor will show this version. If the article is open in the web editor right now (recent autosave), it refuses unless force: true. ' +
+        'Use it only after nw_score_content is at least 80 (or beats the best competitor if higher), and only for the analysis the article was written for. Spends nothing.',
       inputSchema: z.strictObject({
         query: queryId,
-        ...contentFields,
+        ...requiredContentFields,
         term_detail: termDetail,
         force: z.boolean().default(false).describe('Save even if the article looks open in the web editor (recent autosave). Only after the user confirms.'),
       }),

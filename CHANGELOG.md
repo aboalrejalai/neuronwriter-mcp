@@ -4,6 +4,12 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-11-22
+
+### Changed
+- Require `title` and `description` on `nw_score_content` and `nw_import_content` so agents cannot score body-only drafts.
+- Server instructions and the neuronwriter-api skill now gate publish on content score ≥ 80 (or beating the best competitor).
+
 ## [0.3.0] - 2026-10-13
 
 ### Added

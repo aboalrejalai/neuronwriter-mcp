@@ -29,6 +29,21 @@ export const contentFields = {
   description: z.string().max(2_000).optional().describe('Meta description.'),
 };
 
+/** Required for nw_score_content and nw_import_content so agents cannot score body-only drafts. */
+export const requiredContentFields = {
+  html: contentFields.html,
+  title: z
+    .string()
+    .min(1)
+    .max(1_000)
+    .describe('SEO title (meta title). Required — scoring without it collapses the meta part of the content score.'),
+  description: z
+    .string()
+    .min(1)
+    .max(2_000)
+    .describe('Meta description. Required — scoring without it collapses the meta part of the content score.'),
+};
+
 const termStatus = z.enum(['missing', 'use_more', 'ok', 'use_less', 'use_much_less']);
 
 export const scoreShape = {

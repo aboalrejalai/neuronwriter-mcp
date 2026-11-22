@@ -36,7 +36,13 @@ await live('phase2-analysis', async ({ step, onRevert, log }) => {
 
   // Read-only extras
   await step('nw_get_content', { query: Q });
-  await step('nw_score_content', { query: Q, html: '<h1>تصريف مياه الأمطار</h1><p>تصريف مياه الأمطار في بريدة والقصيم.</p>', term_detail: 'gaps' });
+  await step('nw_score_content', {
+    query: Q,
+    title: 'تصريف مياه الأمطار في بريدة والقصيم',
+    description: 'تصريف مياه الأمطار في بريدة والقصيم: ماذا يشمل العمل وكيف تتم الزيارة قبل عرض السعر المكتوب.',
+    html: '<h1>تصريف مياه الأمطار</h1><p>تصريف مياه الأمطار في بريدة والقصيم.</p>',
+    term_detail: 'gaps',
+  });
   const fetched = await step('nw_fetch_page', { query: Q, url: rec?.competitors?.[0]?.url ?? 'https://atalanajd.com', max_chars: 1000 });
   log('fetched', fetched?.title, '| score', fetched?.score?.content_score, '| gaps', fetched?.score?.terms?.body?.length);
   const docx = await step('nw_export_content', { query: Q, html: '<h1>اختبار</h1><p>تصدير تجريبي.</p>', title: 'اختبار تصدير', file_name: 'nw-export-test' });
